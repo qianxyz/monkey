@@ -18,6 +18,8 @@ struct Lexer {
 
 impl Lexer {
     fn new(input: &str) -> Self {
+        assert!(input.is_ascii());
+
         let mut lexer = Self {
             input: input.as_bytes().to_vec(),
             position: 0,
