@@ -2,7 +2,7 @@ use std::str;
 
 use crate::token::{Token, TokenType};
 
-struct Lexer {
+pub struct Lexer {
     /// The input string, stored as a byte array
     input: Vec<u8>,
 
@@ -17,7 +17,7 @@ struct Lexer {
 }
 
 impl Lexer {
-    fn new(input: &str) -> Self {
+    pub fn new(input: &str) -> Self {
         assert!(input.is_ascii());
 
         let mut lexer = Self {
@@ -32,7 +32,7 @@ impl Lexer {
         lexer
     }
 
-    fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
 
         let tok = match self.ch {
