@@ -30,6 +30,11 @@ pub enum TokenType {
     // keywords
     Function,
     Let,
+    True,
+    False,
+    If,
+    Else,
+    Return,
 }
 
 impl TokenType {
@@ -37,6 +42,11 @@ impl TokenType {
         match ident {
             "fn" => Self::Function,
             "let" => Self::Let,
+            "true" => Self::True,
+            "false" => Self::False,
+            "if" => Self::If,
+            "else" => Self::Else,
+            "return" => Self::Return,
             _ => Self::Ident,
         }
     }

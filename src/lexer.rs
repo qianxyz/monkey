@@ -226,4 +226,38 @@ let result = add(five, ten);
 
         helper(input, &tokens);
     }
+
+    #[test]
+    fn more_keywords() {
+        let input = "\
+if (5 < 10) {
+    return true;
+} else {
+    return false;
+}
+";
+
+        use TokenType::*;
+        let tokens = [
+            (If, "if"),
+            (LParen, "("),
+            (Int, "5"),
+            (LT, "<"),
+            (Int, "10"),
+            (RParen, ")"),
+            (LBrace, "{"),
+            (Return, "return"),
+            (True, "true"),
+            (Semicolon, ";"),
+            (RBrace, "}"),
+            (Else, "else"),
+            (LBrace, "{"),
+            (Return, "return"),
+            (False, "false"),
+            (Semicolon, ";"),
+            (RBrace, "}"),
+        ];
+
+        helper(input, &tokens);
+    }
 }
