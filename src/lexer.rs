@@ -36,7 +36,22 @@ impl Lexer {
         self.skip_whitespace();
 
         let tok = match self.ch {
-            b'=' => Token::new(TokenType::Assign, "="),
+            b'=' => {
+                if self.peek_char() == b'=' {
+                    self.read_char();
+                    Token::new(TokenType::EQ, "==")
+                } else {
+                    Token::new(TokenType::Assign, "=")
+                }
+            }
+            b'!' => {
+                if self.peek_char() == b'=' {
+                    self.read_char();
+                    Token::new(TokenType::NQ, "!=")
+                } else {
+                    Token::new(TokenType::Bang, "!")
+                }
+            }
             b';' => Token::new(TokenType::Semicolon, ";"),
             b'(' => Token::new(TokenType::LParen, "("),
             b')' => Token::new(TokenType::RParen, ")"),
@@ -45,7 +60,6 @@ impl Lexer {
             b',' => Token::new(TokenType::Comma, ","),
             b'+' => Token::new(TokenType::Plus, "+"),
             b'-' => Token::new(TokenType::Minus, "-"),
-            b'!' => Token::new(TokenType::Bang, "!"),
             b'*' => Token::new(TokenType::Asterisk, "*"),
             b'/' => Token::new(TokenType::Slash, "/"),
             b'<' => Token::new(TokenType::LT, "<"),
@@ -80,6 +94,10 @@ impl Lexer {
         self.ch = *self.input.get(self.read_position).unwrap_or(&0);
         self.position = self.read_position;
         self.read_position += 1;
+    }
+
+    fn peek_char(&self) -> u8 {
+        *self.input.get(self.read_position).unwrap_or(&0)
     }
 
     fn read_ident(&mut self) -> &str {
@@ -256,6 +274,30 @@ if (5 < 10) {
             (False, "false"),
             (Semicolon, ";"),
             (RBrace, "}"),
+            (Eof, ""),
+        ];
+
+        helper(input, &tokens);
+    }
+
+    #[test]
+    fn peek_eq_nq() {
+        let input = "\
+10 == 10;
+10 != 9;
+";
+
+        use TokenType::*;
+        let tokens = [
+            (Int, "10"),
+            (EQ, "=="),
+            (Int, "10"),
+            (Semicolon, ";"),
+            (Int, "10"),
+            (NQ, "!="),
+            (Int, "9"),
+            (Semicolon, ";"),
+            (Eof, ""),
         ];
 
         helper(input, &tokens);

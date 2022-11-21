@@ -17,6 +17,8 @@ pub enum TokenType {
 
     LT,
     GT,
+    EQ,
+    NQ,
 
     // Delimiters
     Comma,
