@@ -137,10 +137,10 @@ fn is_digit(c: u8) -> bool {
 mod tests {
     use super::*;
 
-    fn helper(input: &str, tokens: &[(TokenType, &str)]) {
+    fn helper(input: &str, tokens: Vec<(TokenType, &str)>) {
         let mut lexer = Lexer::new(input);
         for (ttype, literal) in tokens {
-            assert_eq!(lexer.next_token(), Token::new(*ttype, literal));
+            assert_eq!(lexer.next_token(), Token::new(ttype, literal));
         }
     }
 
@@ -149,7 +149,7 @@ mod tests {
         let input = "=+(){},;";
 
         use TokenType::*;
-        let tokens = [
+        let tokens = vec![
             (Assign, "="),
             (Plus, "+"),
             (LParen, "("),
@@ -161,7 +161,7 @@ mod tests {
             (Eof, ""),
         ];
 
-        helper(input, &tokens);
+        helper(input, tokens);
     }
 
     #[test]
@@ -178,7 +178,7 @@ let result = add(five, ten);
 ";
 
         use TokenType::*;
-        let tokens = [
+        let tokens = vec![
             (Let, "let"),
             (Ident, "five"),
             (Assign, "="),
@@ -218,7 +218,7 @@ let result = add(five, ten);
             (Eof, ""),
         ];
 
-        helper(input, &tokens);
+        helper(input, tokens);
     }
 
     #[test]
@@ -226,7 +226,7 @@ let result = add(five, ten);
         let input = "!-/*5; 5 < 10 > 5;";
 
         use TokenType::*;
-        let tokens = [
+        let tokens = vec![
             (Bang, "!"),
             (Minus, "-"),
             (Slash, "/"),
@@ -242,7 +242,7 @@ let result = add(five, ten);
             (Eof, ""),
         ];
 
-        helper(input, &tokens);
+        helper(input, tokens);
     }
 
     #[test]
@@ -256,7 +256,7 @@ if (5 < 10) {
 ";
 
         use TokenType::*;
-        let tokens = [
+        let tokens = vec![
             (If, "if"),
             (LParen, "("),
             (Int, "5"),
@@ -277,7 +277,7 @@ if (5 < 10) {
             (Eof, ""),
         ];
 
-        helper(input, &tokens);
+        helper(input, tokens);
     }
 
     #[test]
@@ -288,7 +288,7 @@ if (5 < 10) {
 ";
 
         use TokenType::*;
-        let tokens = [
+        let tokens = vec![
             (Int, "10"),
             (EQ, "=="),
             (Int, "10"),
@@ -300,6 +300,6 @@ if (5 < 10) {
             (Eof, ""),
         ];
 
-        helper(input, &tokens);
+        helper(input, tokens);
     }
 }
