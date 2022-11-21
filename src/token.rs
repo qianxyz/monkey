@@ -67,4 +67,8 @@ impl Token {
             literal: literal.to_string(),
         }
     }
+
+    pub fn literal(&self) -> &str {
+        &self.literal
+    }
 }
