@@ -73,7 +73,7 @@ pub struct Identifier {
     /// This will be like `Token { Ident, "x" }`
     pub token: Token,
 
-    /// The value that the identifier is holding
+    /// The name of the identifier
     pub value: String,
 }
 
