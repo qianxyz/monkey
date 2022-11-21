@@ -44,6 +44,12 @@ impl Lexer {
             b'}' => Token::new(TokenType::RBrace, "}"),
             b',' => Token::new(TokenType::Comma, ","),
             b'+' => Token::new(TokenType::Plus, "+"),
+            b'-' => Token::new(TokenType::Minus, "-"),
+            b'!' => Token::new(TokenType::Bang, "!"),
+            b'*' => Token::new(TokenType::Asterisk, "*"),
+            b'/' => Token::new(TokenType::Slash, "/"),
+            b'<' => Token::new(TokenType::LT, "<"),
+            b'>' => Token::new(TokenType::GT, ">"),
             0 => Token::new(TokenType::Eof, ""),
 
             c if is_letter(c) => {
@@ -190,6 +196,30 @@ let result = add(five, ten);
             (Comma, ","),
             (Ident, "ten"),
             (RParen, ")"),
+            (Semicolon, ";"),
+            (Eof, ""),
+        ];
+
+        helper(input, &tokens);
+    }
+
+    #[test]
+    fn more_tokens() {
+        let input = "!-/*5; 5 < 10 > 5;";
+
+        use TokenType::*;
+        let tokens = [
+            (Bang, "!"),
+            (Minus, "-"),
+            (Slash, "/"),
+            (Asterisk, "*"),
+            (Int, "5"),
+            (Semicolon, ";"),
+            (Int, "5"),
+            (LT, "<"),
+            (Int, "10"),
+            (GT, ">"),
+            (Int, "5"),
             (Semicolon, ";"),
             (Eof, ""),
         ];
