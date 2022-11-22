@@ -141,6 +141,10 @@ impl Parser {
     fn parse_expr_stmt(&mut self) -> Option<ast::ExprStmt> {
         let token = self.cur.clone();
         let expr = self.parse_expr(Precedence::Lowest)?;
+
+        // An expression statement ends with an optional semicolon.
+        // This makes REPL friendlier, since you can type `5 + 5`
+        // and it's the same as `5 + 5;`.
         if self.peek_token_is(TokenType::Semicolon) {
             self.next_token();
         }
