@@ -1,12 +1,26 @@
+use std::collections::HashMap;
 use std::mem;
 
 use crate::ast;
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 
-struct Parser<'a> {
+type PrefixParseFn = fn(&mut Parser) -> ast::Expr;
+type InfixParseFn = fn(&mut Parser, ast::Expr) -> ast::Expr;
+
+enum Precedence {
+    Lowest,
+    Equals,      // ==
+    LessGreater, // > or <
+    Sum,         // +
+    Product,     // *
+    Prefix,      // -X or !X
+    Call,        // fn(X)
+}
+
+struct Parser {
     /// a lexer to spit out tokens
-    lexer: &'a mut Lexer,
+    lexer: Lexer,
 
     /// current parse point
     cur: Token,
@@ -16,20 +30,38 @@ struct Parser<'a> {
 
     /// collection of errors
     errors: Vec<ParserError>,
+
+    prefix_parse_fns: HashMap<TokenType, PrefixParseFn>,
+
+    infix_parse_fns: HashMap<TokenType, InfixParseFn>,
 }
 
-impl<'a> Parser<'a> {
-    fn new(lexer: &'a mut Lexer) -> Self {
+impl Parser {
+    fn new(mut lexer: Lexer) -> Self {
         // set first two tokens
         let cur = lexer.next_token();
         let peek = lexer.next_token();
 
-        Self {
+        let mut ret = Self {
             lexer,
             cur,
             peek,
             errors: Vec::new(),
-        }
+            prefix_parse_fns: HashMap::new(),
+            infix_parse_fns: HashMap::new(),
+        };
+
+        ret.register_prefix(TokenType::Ident, Self::parse_identifier);
+
+        ret
+    }
+
+    fn register_prefix(&mut self, t: TokenType, f: PrefixParseFn) {
+        self.prefix_parse_fns.insert(t, f);
+    }
+
+    fn register_infix(&mut self, t: TokenType, f: InfixParseFn) {
+        self.infix_parse_fns.insert(t, f);
     }
 
     fn next_token(&mut self) {
@@ -53,7 +85,7 @@ impl<'a> Parser<'a> {
         match self.cur.ttype() {
             TokenType::Let => Some(ast::Stmt::Let(self.parse_let_stmt()?)),
             TokenType::Return => Some(ast::Stmt::Return(self.parse_return_stmt()?)),
-            _ => None,
+            _ => Some(ast::Stmt::Expr(self.parse_expr_stmt()?)),
         }
     }
 
@@ -106,6 +138,37 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_expr_stmt(&mut self) -> Option<ast::ExprStmt> {
+        let token = self.cur.clone();
+        let expr = self.parse_expr(Precedence::Lowest)?;
+        if self.peek_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        Some(ast::ExprStmt { token, expr })
+    }
+
+    fn parse_expr(&mut self, precedence: Precedence) -> Option<ast::Expr> {
+        // clippy suggests this one-liner:
+        // self.prefix_parse_fns.get(self.cur.ttype()).map(|f| f(self))
+        // But it does not work, since closure requires unique access to self,
+        // but self is already borrowed by accessing `prefix_parse_fn`.
+        // Instead, we must end this borrow by extracting `f` first.
+        #[allow(clippy::manual_map)]
+        if let Some(f) = self.prefix_parse_fns.get(self.cur.ttype()) {
+            Some(f(self))
+        } else {
+            None
+        }
+    }
+
+    fn parse_identifier(&mut self) -> ast::Expr {
+        ast::Expr::Ident(ast::Identifier {
+            token: self.cur.clone(),
+            value: self.cur.literal().to_string(),
+        })
+    }
+
     fn cur_token_is(&self, t: TokenType) -> bool {
         self.cur.ttype() == &t
     }
@@ -144,7 +207,7 @@ struct ParserError {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Node, Stmt};
+    use crate::ast::{Expr, Node, Stmt};
 
     use super::*;
 
@@ -162,8 +225,8 @@ let x = 5;
 let y = 10;
 let foobar = 838383;
 ";
-        let mut lexer = Lexer::new(input);
-        let mut parser = Parser::new(&mut lexer);
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
 
         let program = parser.parse_program();
         let mut stmts = program.stmts.iter();
@@ -181,8 +244,8 @@ let x 5;
 let = 10;
 let 838383;
 ";
-        let mut lexer = Lexer::new(input);
-        let mut parser = Parser::new(&mut lexer);
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
         assert!(program.stmts.is_empty()); // no valid statements
         let mut errors = parser.errors.iter();
@@ -217,8 +280,8 @@ return 5;
 return 10;
 return 993322;
 ";
-        let mut lexer = Lexer::new(input);
-        let mut parser = Parser::new(&mut lexer);
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
         let mut stmts = program.stmts.iter();
         for _ in 0..3 {
@@ -227,6 +290,23 @@ return 993322;
             let Stmt::Return(s) = stmt else { panic!() };
             assert_eq!(s.token_literal(), "return");
         }
+        assert!(stmts.next().is_none());
+    }
+
+    #[test]
+    fn ident_expr() {
+        let input = "foobar;";
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        let mut stmts = program.stmts.iter();
+
+        let s = stmts.next().unwrap();
+        let Stmt::Expr(s) = s else { panic!() };
+        let Expr::Ident(e) = &s.expr else { panic!() };
+        assert_eq!(e.value, "foobar");
+        assert_eq!(e.token_literal(), "foobar");
+
         assert!(stmts.next().is_none());
     }
 }
