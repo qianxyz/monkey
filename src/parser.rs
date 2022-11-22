@@ -52,6 +52,7 @@ impl<'a> Parser<'a> {
     fn parse_stmt(&mut self) -> Option<ast::Stmt> {
         match self.cur.ttype() {
             TokenType::Let => Some(ast::Stmt::Let(self.parse_let_stmt()?)),
+            TokenType::Return => Some(ast::Stmt::Return(self.parse_return_stmt()?)),
             _ => None,
         }
     }
@@ -84,9 +85,24 @@ impl<'a> Parser<'a> {
         }
 
         Some(ast::LetStmt {
-            token: token,
+            token,
             name: name.into(),
             value: ast::Expr::Dummy,
+        })
+    }
+
+    fn parse_return_stmt(&mut self) -> Option<ast::ReturnStmt> {
+        let token = self.cur.clone();
+        self.next_token();
+
+        // TODO: we skip parsing the expression for now
+        while !self.cur_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        Some(ast::ReturnStmt {
+            token,
+            return_value: ast::Expr::Dummy,
         })
     }
 
@@ -192,5 +208,25 @@ let 838383;
             }
         );
         assert!(errors.next().is_none());
+    }
+
+    #[test]
+    fn return_stmts() {
+        let input = "\
+return 5;
+return 10;
+return 993322;
+";
+        let mut lexer = Lexer::new(input);
+        let mut parser = Parser::new(&mut lexer);
+        let program = parser.parse_program();
+        let mut stmts = program.stmts.iter();
+        for _ in 0..3 {
+            let stmt = stmts.next().unwrap();
+            assert_eq!(stmt.token_literal(), "return");
+            let Stmt::Return(s) = stmt else { panic!() };
+            assert_eq!(s.token_literal(), "return");
+        }
+        assert!(stmts.next().is_none());
     }
 }
