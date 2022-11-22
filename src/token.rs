@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TokenType {
     Illegal,
     Eof,
@@ -54,7 +54,7 @@ impl TokenType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Token {
     ttype: TokenType,
     literal: String,
@@ -68,7 +68,15 @@ impl Token {
         }
     }
 
+    pub fn ttype(&self) -> &TokenType {
+        &self.ttype
+    }
+
     pub fn literal(&self) -> &str {
         &self.literal
+    }
+
+    pub fn is_eof(&self) -> bool {
+        self.ttype == TokenType::Eof
     }
 }

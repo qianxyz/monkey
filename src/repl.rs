@@ -1,7 +1,6 @@
 use std::io::{self, BufRead, Write};
 
 use crate::lexer::Lexer;
-use crate::token::{Token, TokenType};
 
 const PROMPT: &str = "> ";
 
@@ -19,7 +18,7 @@ pub fn run() {
         loop {
             let token = lexer.next_token();
             println!("{:?}", token);
-            if token == Token::new(TokenType::Eof, "") {
+            if token.is_eof() {
                 break;
             }
         }

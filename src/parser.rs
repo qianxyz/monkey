@@ -1,8 +1,8 @@
 use std::mem;
 
-use crate::ast::Program;
+use crate::ast;
 use crate::lexer::Lexer;
-use crate::token::Token;
+use crate::token::{Token, TokenType};
 
 struct Parser<'a> {
     /// a lexer to spit out tokens
@@ -28,14 +28,82 @@ impl<'a> Parser<'a> {
         self.cur = mem::replace(&mut self.peek, self.lexer.next_token());
     }
 
-    fn parse_program(&mut self) -> Program {
-        todo!()
+    fn parse_program(&mut self) -> ast::Program {
+        let mut stmts = Vec::new();
+
+        while !self.cur.is_eof() {
+            if let Ok(stmt) = self.parse_stmt() {
+                stmts.push(stmt);
+            }
+            self.next_token();
+        }
+
+        ast::Program { stmts }
+    }
+
+    fn parse_stmt(&mut self) -> Result<ast::Stmt, ParserError> {
+        match self.cur.ttype() {
+            TokenType::Let => Ok(ast::Stmt::Let(self.parse_let_stmt()?)),
+            _ => todo!(),
+        }
+    }
+
+    fn parse_let_stmt(&mut self) -> Result<ast::LetStmt, ParserError> {
+        // TODO: token owns a String, so we have to explicitly clone here.
+        // maybe it can just hold a reference &str so it can be copied.
+        let token = self.cur.clone(); // the `Let` token
+
+        // `Let` must be followed by an identifier
+        if !self.expect_peek(TokenType::Ident) {
+            return Err(ParserError);
+        }
+        let name = ast::Identifier {
+            token: self.cur.clone(),
+            value: self.cur.literal().to_string(),
+        };
+
+        // the next token must be `=`
+        if !self.expect_peek(TokenType::Assign) {
+            return Err(ParserError);
+        }
+
+        // TODO: we skip parsing the expression for now
+        while !self.cur_token_is(TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        Ok(ast::LetStmt {
+            token: token,
+            name: name.into(),
+            value: ast::Expr::Dummy,
+        })
+    }
+
+    fn cur_token_is(&self, t: TokenType) -> bool {
+        self.cur.ttype() == &t
+    }
+
+    fn peek_token_is(&self, t: TokenType) -> bool {
+        self.peek.ttype() == &t
+    }
+
+    /// An `assertion function`, where we only advance parse point
+    /// if the next token is of expected type.
+    fn expect_peek(&mut self, t: TokenType) -> bool {
+        if self.peek_token_is(t) {
+            self.next_token();
+            true
+        } else {
+            false
+        }
     }
 }
 
+struct ParserError;
+
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Stmt, Node};
+    use crate::ast::{Node, Stmt};
 
     use super::*;
 

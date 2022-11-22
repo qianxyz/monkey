@@ -25,12 +25,15 @@ impl Node for Stmt {
 /// Expressions
 pub enum Expr {
     Ident(Identifier),
+    // TODO: this is a placeholder variant before we can parse valid expressions
+    Dummy,
 }
 
 impl Node for Expr {
     fn token_literal(&self) -> String {
         match self {
             Self::Ident(e) => e.token_literal(),
+            _ => todo!(),
         }
     }
 }
