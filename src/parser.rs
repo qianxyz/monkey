@@ -13,6 +13,9 @@ struct Parser<'a> {
 
     /// the next parse point
     peek: Token,
+
+    /// collection of errors
+    errors: Vec<ParserError>,
 }
 
 impl<'a> Parser<'a> {
@@ -21,7 +24,12 @@ impl<'a> Parser<'a> {
         let cur = lexer.next_token();
         let peek = lexer.next_token();
 
-        Self { lexer, cur, peek }
+        Self {
+            lexer,
+            cur,
+            peek,
+            errors: Vec::new(),
+        }
     }
 
     fn next_token(&mut self) {
@@ -32,7 +40,7 @@ impl<'a> Parser<'a> {
         let mut stmts = Vec::new();
 
         while !self.cur.is_eof() {
-            if let Ok(stmt) = self.parse_stmt() {
+            if let Some(stmt) = self.parse_stmt() {
                 stmts.push(stmt);
             }
             self.next_token();
@@ -41,21 +49,24 @@ impl<'a> Parser<'a> {
         ast::Program { stmts }
     }
 
-    fn parse_stmt(&mut self) -> Result<ast::Stmt, ParserError> {
+    fn parse_stmt(&mut self) -> Option<ast::Stmt> {
         match self.cur.ttype() {
-            TokenType::Let => Ok(ast::Stmt::Let(self.parse_let_stmt()?)),
-            _ => todo!(),
+            TokenType::Let => Some(ast::Stmt::Let(self.parse_let_stmt()?)),
+            _ => None,
         }
     }
 
-    fn parse_let_stmt(&mut self) -> Result<ast::LetStmt, ParserError> {
+    // TODO: this function returning None means we have a ParserError.
+    // Since every let statement is either an ast::LetStmt or a ParserError,
+    // it may be better to return Result<> here.
+    fn parse_let_stmt(&mut self) -> Option<ast::LetStmt> {
         // TODO: token owns a String, so we have to explicitly clone here.
         // maybe it can just hold a reference &str so it can be copied.
         let token = self.cur.clone(); // the `Let` token
 
         // `Let` must be followed by an identifier
         if !self.expect_peek(TokenType::Ident) {
-            return Err(ParserError);
+            return None;
         }
         let name = ast::Identifier {
             token: self.cur.clone(),
@@ -64,7 +75,7 @@ impl<'a> Parser<'a> {
 
         // the next token must be `=`
         if !self.expect_peek(TokenType::Assign) {
-            return Err(ParserError);
+            return None;
         }
 
         // TODO: we skip parsing the expression for now
@@ -72,7 +83,7 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        Ok(ast::LetStmt {
+        Some(ast::LetStmt {
             token: token,
             name: name.into(),
             value: ast::Expr::Dummy,
@@ -94,12 +105,26 @@ impl<'a> Parser<'a> {
             self.next_token();
             true
         } else {
+            self.peek_error(t);
             false
         }
     }
+
+    /// Append to errors if the next token is not expected.
+    fn peek_error(&mut self, t: TokenType) {
+        let e = ParserError {
+            expected: t,
+            got: *self.peek.ttype(),
+        };
+        self.errors.push(e);
+    }
 }
 
-struct ParserError;
+#[derive(Debug, PartialEq, Eq)]
+struct ParserError {
+    expected: TokenType,
+    got: TokenType,
+}
 
 #[cfg(test)]
 mod tests {
@@ -131,5 +156,41 @@ let foobar = 838383;
         let_stmt_helper(stmts.next().unwrap(), "y");
         let_stmt_helper(stmts.next().unwrap(), "foobar");
         assert!(stmts.next().is_none());
+    }
+
+    #[test]
+    fn let_stmts_error() {
+        let input = "\
+let x 5;
+let = 10;
+let 838383;
+";
+        let mut lexer = Lexer::new(input);
+        let mut parser = Parser::new(&mut lexer);
+        let program = parser.parse_program();
+        assert!(program.stmts.is_empty()); // no valid statements
+        let mut errors = parser.errors.iter();
+        assert_eq!(
+            errors.next().unwrap(),
+            &ParserError {
+                expected: TokenType::Assign,
+                got: TokenType::Int,
+            }
+        );
+        assert_eq!(
+            errors.next().unwrap(),
+            &ParserError {
+                expected: TokenType::Ident,
+                got: TokenType::Assign,
+            }
+        );
+        assert_eq!(
+            errors.next().unwrap(),
+            &ParserError {
+                expected: TokenType::Ident,
+                got: TokenType::Int,
+            }
+        );
+        assert!(errors.next().is_none());
     }
 }
