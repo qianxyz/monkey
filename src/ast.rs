@@ -7,11 +7,12 @@ use std::fmt;
 use crate::token::Token;
 
 /// A node in AST.
-pub trait Node: fmt::Display {
+pub trait Node: fmt::Debug + fmt::Display + PartialEq + Eq {
     fn token_literal(&self) -> &str;
 }
 
 /// A wrapper for various statements.
+#[derive(Debug, PartialEq, Eq)]
 pub enum Stmt {
     Let(LetStmt),
     Return(ReturnStmt),
@@ -40,6 +41,7 @@ impl fmt::Display for Stmt {
 }
 
 /// A wrapper for various expressions.
+#[derive(Debug, PartialEq, Eq)]
 pub enum Expr {
     Ident(Identifier),
     Int(IntLiteral),
@@ -73,6 +75,7 @@ impl fmt::Display for Expr {
 
 /// The root node of every AST.
 /// A program is a series of statements.
+#[derive(Debug, PartialEq, Eq)]
 pub struct Program {
     pub stmts: Vec<Stmt>,
 }
@@ -96,6 +99,7 @@ impl fmt::Display for Program {
 }
 
 /// A `let` statement.
+#[derive(Debug, PartialEq, Eq)]
 pub struct LetStmt {
     /// This should always be `Token { type: Let, literal: "let" }`
     pub token: Token,
@@ -126,6 +130,7 @@ impl fmt::Display for LetStmt {
 }
 
 /// An Identifier (as an expression)
+#[derive(Debug, PartialEq, Eq)]
 pub struct Identifier {
     /// This should be like `Token { type: Ident, literal: "x" }`
     pub token: Token,
@@ -147,6 +152,7 @@ impl fmt::Display for Identifier {
 }
 
 /// A `return` statement.
+#[derive(Debug, PartialEq, Eq)]
 pub struct ReturnStmt {
     /// This should always be `Token { type: Return, literal: "return" }`
     pub token: Token,
@@ -173,6 +179,7 @@ impl fmt::Display for ReturnStmt {
 /// The second line is an expression statment.
 /// With this wrapper, an expression can be added to the statements
 /// of an ast::Program (which is the sole purpose of the wrapper).
+#[derive(Debug, PartialEq, Eq)]
 pub struct ExprStmt {
     /// The first token of the expression
     pub token: Token,
@@ -194,6 +201,7 @@ impl fmt::Display for ExprStmt {
 }
 
 /// An integer literal like `5`.
+#[derive(Debug, PartialEq, Eq)]
 pub struct IntLiteral {
     /// A token like `Token { type: Int, literal: "5" }`
     pub token: Token,
@@ -215,6 +223,7 @@ impl fmt::Display for IntLiteral {
 }
 
 /// A prefix expression, like `-15` or `!5`.
+#[derive(Debug, PartialEq, Eq)]
 pub struct PrefixExpr {
     /// The prefix token like `-` or `!`
     pub token: Token,

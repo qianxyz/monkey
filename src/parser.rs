@@ -225,15 +225,14 @@ enum ParseError {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::{Expr, Node, Stmt};
-
     use super::*;
 
-    fn let_stmt_helper(s: &Stmt, name: &str) {
-        assert_eq!(s.token_literal(), "let");
-        let Stmt::Let(s) = s else { panic!() };
-        assert_eq!(s.name.value, name);
-        assert_eq!(s.name.token_literal(), name);
+    fn parser_helper(input: &str) -> (Vec<ast::Stmt>, Vec<ParseError>) {
+        let lexer = Lexer::new(input);
+        let parser = Parser::new(lexer);
+        let program = parser.parse_program();
+
+        (program.stmts, parser.errors)
     }
 
     #[test]
@@ -243,16 +242,29 @@ let x = 5;
 let y = 10;
 let foobar = 838383;
 ";
-        let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
+        let expected = [("x", 5), ("y", 10), ("foobar", 838383)];
 
-        let program = parser.parse_program();
-        let mut stmts = program.stmts.iter();
+        let (stmts, errors) = parser_helper(input);
 
-        let_stmt_helper(stmts.next().unwrap(), "x");
-        let_stmt_helper(stmts.next().unwrap(), "y");
-        let_stmt_helper(stmts.next().unwrap(), "foobar");
-        assert!(stmts.next().is_none());
+        assert_eq!(stmts.len(), 3);
+        assert!(errors.is_empty());
+
+        for i in 0..3 {
+            assert_eq!(
+                stmts[i],
+                ast::Stmt::Let(ast::LetStmt {
+                    token: Token::new(TokenType::Let, "let"),
+                    name: ast::Identifier {
+                        token: Token::new(TokenType::Ident, expected[i].0),
+                        value: expected[i].0.to_string(),
+                    },
+                    value: ast::Expr::Int(ast::IntLiteral {
+                        token: Token::new(TokenType::Int, &expected[i].1.to_string()),
+                        value: expected[i].1
+                    })
+                })
+            )
+        }
     }
 
     #[test]
