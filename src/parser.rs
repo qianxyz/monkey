@@ -120,7 +120,7 @@ impl Parser {
 
         Some(ast::LetStmt {
             token,
-            name: name.into(),
+            name,
             value: ast::Expr::Dummy,
         })
     }
@@ -180,9 +180,8 @@ impl Parser {
         match self.cur.literal().parse::<i32>() {
             Ok(value) => Some(ast::Expr::Int(ast::IntLiteral { token, value })),
             Err(_) => {
-                self.errors.push(ParseError::ParseIntError {
-                    s: self.cur.literal().to_string(),
-                });
+                self.errors
+                    .push(ParseError::ParseIntError(self.cur.literal().to_string()));
                 None
             }
         }
@@ -222,7 +221,7 @@ impl Parser {
 #[derive(Debug, PartialEq, Eq)]
 enum ParseError {
     UnexpectedToken { expected: TokenType, got: TokenType },
-    ParseIntError { s: String },
+    ParseIntError(String),
 }
 
 #[cfg(test)]
@@ -356,9 +355,7 @@ return 993322;
 
         assert_eq!(
             errors.next().unwrap(),
-            &ParseError::ParseIntError {
-                s: input.to_string()
-            }
+            &ParseError::ParseIntError(input.to_string())
         );
 
         assert!(errors.next().is_none());

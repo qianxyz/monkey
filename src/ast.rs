@@ -11,7 +11,7 @@ pub trait Node: fmt::Display {
     fn token_literal(&self) -> String;
 }
 
-/// Statements
+/// A wrapper for various statements.
 pub enum Stmt {
     Let(LetStmt),
     Return(ReturnStmt),
@@ -39,7 +39,7 @@ impl fmt::Display for Stmt {
     }
 }
 
-/// Expressions
+/// A wrapper for various expressions.
 pub enum Expr {
     Ident(Identifier),
     Int(IntLiteral),
@@ -94,11 +94,11 @@ impl fmt::Display for Program {
 
 /// A `let` statement.
 pub struct LetStmt {
-    /// This will always be `Token { Let, "let" }`
+    /// This should always be `Token { type: Let, literal: "let" }`
     pub token: Token,
 
     /// The `x` in `let x = 5 * 5`
-    pub name: Box<Identifier>,
+    pub name: Identifier,
 
     /// The `5 * 5` in `let x = 5 * 5`
     pub value: Expr,
@@ -124,7 +124,7 @@ impl fmt::Display for LetStmt {
 
 /// An Identifier (as an expression)
 pub struct Identifier {
-    /// This will be like `Token { Ident, "x" }`
+    /// This should be like `Token { type: Ident, literal: "x" }`
     pub token: Token,
 
     /// The name of the identifier
@@ -145,7 +145,7 @@ impl fmt::Display for Identifier {
 
 /// A `return` statement.
 pub struct ReturnStmt {
-    /// This will always be `Token { Return, "return" }`
+    /// This should always be `Token { type: Return, literal: "return" }`
     pub token: Token,
 
     /// The value to return
@@ -192,7 +192,7 @@ impl fmt::Display for ExprStmt {
 
 /// An integer literal like `5`.
 pub struct IntLiteral {
-    /// A token like `Token { Int, "5" }`
+    /// A token like `Token { type: Int, literal: "5" }`
     pub token: Token,
 
     /// The value of the integer
@@ -231,7 +231,7 @@ mod tests {
 
         let stmt = LetStmt {
             token,
-            name: name.into(),
+            name,
             value: Expr::Ident(value),
         };
 
