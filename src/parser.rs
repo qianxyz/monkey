@@ -229,7 +229,7 @@ mod tests {
 
     fn parser_helper(input: &str) -> (Vec<ast::Stmt>, Vec<ParseError>) {
         let lexer = Lexer::new(input);
-        let parser = Parser::new(lexer);
+        let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
 
         (program.stmts, parser.errors)
@@ -242,25 +242,25 @@ let x = 5;
 let y = 10;
 let foobar = 838383;
 ";
-        let expected = [("x", 5), ("y", 10), ("foobar", 838383)];
+        let expected = [("x", "5"), ("y", "10"), ("foobar", "838383")];
 
         let (stmts, errors) = parser_helper(input);
 
         assert_eq!(stmts.len(), 3);
         assert!(errors.is_empty());
 
-        for i in 0..3 {
+        for (s, (x, n)) in stmts.into_iter().zip(expected.into_iter()) {
             assert_eq!(
-                stmts[i],
+                s,
                 ast::Stmt::Let(ast::LetStmt {
                     token: Token::new(TokenType::Let, "let"),
                     name: ast::Identifier {
-                        token: Token::new(TokenType::Ident, expected[i].0),
-                        value: expected[i].0.to_string(),
+                        token: Token::new(TokenType::Ident, x),
+                        value: x.to_string(),
                     },
                     value: ast::Expr::Int(ast::IntLiteral {
-                        token: Token::new(TokenType::Int, &expected[i].1.to_string()),
-                        value: expected[i].1
+                        token: Token::new(TokenType::Int, n),
+                        value: n.parse().unwrap()
                     })
                 })
             )
@@ -274,32 +274,21 @@ let x 5;
 let = 10;
 let 838383;
 ";
-        let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
-        parser.parse_program();
-        let mut errors = parser.errors.iter();
-        assert_eq!(
-            errors.next().unwrap(),
-            &ParseError::UnexpectedToken {
-                expected: TokenType::Assign,
-                got: TokenType::Int,
-            }
-        );
-        assert_eq!(
-            errors.next().unwrap(),
-            &ParseError::UnexpectedToken {
-                expected: TokenType::Ident,
-                got: TokenType::Assign,
-            }
-        );
-        assert_eq!(
-            errors.next().unwrap(),
-            &ParseError::UnexpectedToken {
-                expected: TokenType::Ident,
-                got: TokenType::Int,
-            }
-        );
-        assert!(errors.next().is_none());
+        use TokenType::*;
+        let errs = [(Assign, Int), (Ident, Assign), (Ident, Int)];
+
+        let (_, errors) = parser_helper(input);
+        assert_eq!(errors.len(), 3);
+
+        for (e, (l, r)) in errors.into_iter().zip(errs.into_iter()) {
+            assert_eq!(
+                e,
+                ParseError::UnexpectedToken {
+                    expected: l,
+                    got: r,
+                }
+            )
+        }
     }
 
     #[test]
@@ -309,66 +298,71 @@ return 5;
 return 10;
 return 993322;
 ";
-        let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-        let mut stmts = program.stmts.iter();
-        for _ in 0..3 {
-            let stmt = stmts.next().unwrap();
-            assert_eq!(stmt.token_literal(), "return");
-            let Stmt::Return(s) = stmt else { panic!() };
-            assert_eq!(s.token_literal(), "return");
+        let expected = ["5", "10", "993322"];
+
+        let (stmts, errors) = parser_helper(input);
+        assert!(errors.is_empty());
+        assert_eq!(stmts.len(), 3);
+
+        for (s, n) in stmts.into_iter().zip(expected.into_iter()) {
+            assert_eq!(
+                s,
+                ast::Stmt::Return(ast::ReturnStmt {
+                    token: Token::new(TokenType::Return, "return"),
+                    return_value: ast::Expr::Int(ast::IntLiteral {
+                        token: Token::new(TokenType::Int, n),
+                        value: n.parse().unwrap(),
+                    })
+                })
+            )
         }
-        assert!(stmts.next().is_none());
     }
 
     #[test]
     fn ident_expr() {
         let input = "foobar;";
-        let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-        let mut stmts = program.stmts.iter();
+        let (stmts, errors) = parser_helper(input);
+        assert!(errors.is_empty());
+        assert_eq!(stmts.len(), 1);
 
-        let s = stmts.next().unwrap();
-        let Stmt::Expr(s) = s else { panic!() };
-        let Expr::Ident(e) = &s.expr else { panic!() };
-        assert_eq!(e.value, "foobar");
-        assert_eq!(e.token_literal(), "foobar");
-
-        assert!(stmts.next().is_none());
+        assert_eq!(
+            stmts[0],
+            ast::Stmt::Expr(ast::ExprStmt {
+                token: Token::new(TokenType::Ident, "foobar"),
+                expr: ast::Expr::Ident(ast::Identifier {
+                    token: Token::new(TokenType::Ident, "foobar"),
+                    value: "foobar".to_string()
+                })
+            })
+        )
     }
 
     #[test]
     fn int_literal_expr() {
         let input = "5;";
-        let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-        let mut stmts = program.stmts.iter();
+        let (stmts, errors) = parser_helper(input);
+        assert!(errors.is_empty());
+        assert_eq!(stmts.len(), 1);
 
-        let s = stmts.next().unwrap();
-        let Stmt::Expr(s) = s else { panic!() };
-        let Expr::Int(e) = &s.expr else { panic!() };
-        assert_eq!(e.value, 5);
-        assert_eq!(e.token_literal(), "5");
-
-        assert!(stmts.next().is_none());
+        assert_eq!(
+            stmts[0],
+            ast::Stmt::Expr(ast::ExprStmt {
+                token: Token::new(TokenType::Int, "5"),
+                expr: ast::Expr::Int(ast::IntLiteral {
+                    token: Token::new(TokenType::Int, "5"),
+                    value: 5
+                })
+            })
+        )
     }
 
     #[test]
     fn too_big_int() {
         let input = "100000000000000000000000";
-        let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
-        parser.parse_program();
-        let mut errors = parser.errors.iter();
+        let (stmts, errors) = parser_helper(input);
+        assert!(stmts.is_empty());
+        assert_eq!(errors.len(), 1);
 
-        assert_eq!(
-            errors.next().unwrap(),
-            &ParseError::ParseIntError(input.to_string())
-        );
-
-        assert!(errors.next().is_none());
+        assert_eq!(errors[0], ParseError::ParseIntError(input.to_string()))
     }
 }
