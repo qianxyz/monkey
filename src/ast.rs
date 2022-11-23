@@ -43,6 +43,7 @@ impl fmt::Display for Stmt {
 pub enum Expr {
     Ident(Identifier),
     Int(IntLiteral),
+    Prefix(PrefixExpr),
     // TODO: this is a placeholder variant before we can parse valid expressions
     Dummy,
 }
@@ -52,6 +53,7 @@ impl Node for Expr {
         match self {
             Self::Ident(e) => e.token_literal(),
             Self::Int(e) => e.token_literal(),
+            Self::Prefix(e) => e.token_literal(),
             Self::Dummy => todo!(),
         }
     }
@@ -62,6 +64,7 @@ impl fmt::Display for Expr {
         match self {
             Self::Ident(e) => write!(f, "{}", e)?,
             Self::Int(e) => write!(f, "{}", e)?,
+            Self::Prefix(e) => write!(f, "{}", e)?,
             Self::Dummy => todo!(),
         }
         Ok(())
@@ -208,6 +211,30 @@ impl Node for IntLiteral {
 impl fmt::Display for IntLiteral {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.token_literal())
+    }
+}
+
+/// A prefix expression, like `-15` or `!5`.
+pub struct PrefixExpr {
+    /// The prefix token like `-` or `!`
+    pub token: Token,
+
+    /// The operator as a string
+    pub op: String,
+
+    /// The expression at the right
+    pub right: Box<Expr>,
+}
+
+impl Node for PrefixExpr {
+    fn token_literal(&self) -> &str {
+        self.token.literal()
+    }
+}
+
+impl fmt::Display for PrefixExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}{})", self.op, self.right)
     }
 }
 
