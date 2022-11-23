@@ -8,7 +8,7 @@ use crate::token::Token;
 
 /// A node in AST.
 pub trait Node: fmt::Display {
-    fn token_literal(&self) -> String;
+    fn token_literal(&self) -> &str;
 }
 
 /// A wrapper for various statements.
@@ -19,7 +19,7 @@ pub enum Stmt {
 }
 
 impl Node for Stmt {
-    fn token_literal(&self) -> String {
+    fn token_literal(&self) -> &str {
         match self {
             Self::Let(s) => s.token_literal(),
             Self::Return(s) => s.token_literal(),
@@ -48,7 +48,7 @@ pub enum Expr {
 }
 
 impl Node for Expr {
-    fn token_literal(&self) -> String {
+    fn token_literal(&self) -> &str {
         match self {
             Self::Ident(e) => e.token_literal(),
             Self::Int(e) => e.token_literal(),
@@ -75,10 +75,10 @@ pub struct Program {
 }
 
 impl Node for Program {
-    fn token_literal(&self) -> String {
+    fn token_literal(&self) -> &str {
         match self.stmts.first() {
             Some(stmt) => stmt.token_literal(),
-            None => String::new(),
+            None => "",
         }
     }
 }
@@ -105,8 +105,8 @@ pub struct LetStmt {
 }
 
 impl Node for LetStmt {
-    fn token_literal(&self) -> String {
-        self.token.literal().to_string()
+    fn token_literal(&self) -> &str {
+        self.token.literal()
     }
 }
 
@@ -132,8 +132,8 @@ pub struct Identifier {
 }
 
 impl Node for Identifier {
-    fn token_literal(&self) -> String {
-        self.token.literal().to_string()
+    fn token_literal(&self) -> &str {
+        self.token.literal()
     }
 }
 
@@ -153,8 +153,8 @@ pub struct ReturnStmt {
 }
 
 impl Node for ReturnStmt {
-    fn token_literal(&self) -> String {
-        self.token.literal().to_string()
+    fn token_literal(&self) -> &str {
+        self.token.literal()
     }
 }
 
@@ -179,8 +179,8 @@ pub struct ExprStmt {
 }
 
 impl Node for ExprStmt {
-    fn token_literal(&self) -> String {
-        self.token.literal().to_string()
+    fn token_literal(&self) -> &str {
+        self.token.literal()
     }
 }
 
@@ -200,8 +200,8 @@ pub struct IntLiteral {
 }
 
 impl Node for IntLiteral {
-    fn token_literal(&self) -> String {
-        self.token.literal().to_string()
+    fn token_literal(&self) -> &str {
+        self.token.literal()
     }
 }
 

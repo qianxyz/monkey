@@ -160,7 +160,6 @@ impl Parser {
         // But it does not work, since closure requires unique access to self,
         // but self is already borrowed by accessing `prefix_parse_fn`.
         // Instead, we must end this borrow by extracting `f` first.
-        #[allow(clippy::manual_map)]
         if let Some(f) = self.prefix_parse_fns.get(self.cur.ttype()) {
             f(self)
         } else {
