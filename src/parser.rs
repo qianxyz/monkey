@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::mem;
 
-use crate::ast;
+use crate::ast::{Expr, ExprStmt, Identifier, IntLiteral, LetStmt, Program, ReturnStmt, Stmt};
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 
-type PrefixParseFn = fn(&mut Parser) -> Option<ast::Expr>;
-type InfixParseFn = fn(&mut Parser, ast::Expr) -> ast::Expr;
+type PrefixParseFn = fn(&mut Parser) -> Option<Expr>;
+type InfixParseFn = fn(&mut Parser, Expr) -> Expr;
 
 enum Precedence {
     Lowest,
@@ -69,7 +69,7 @@ impl Parser {
         self.cur = mem::replace(&mut self.peek, self.lexer.next_token());
     }
 
-    fn parse_program(&mut self) -> ast::Program {
+    fn parse_program(&mut self) -> Program {
         let mut stmts = Vec::new();
 
         while !self.cur.is_eof() {
@@ -79,7 +79,7 @@ impl Parser {
             self.next_token();
         }
 
-        ast::Program { stmts }
+        Program { stmts }
     }
 
     // ? Most of the parsing functions return Option<ast::Stmt>, which is None
@@ -88,22 +88,22 @@ impl Parser {
     // This grants more flexibility, e.g., raising multiple errors
     // in one parsing function; If such need never rises at the end,
     // maybe it's better to be explicit by returning Result<Stmt, ParseError>.
-    fn parse_stmt(&mut self) -> Option<ast::Stmt> {
+    fn parse_stmt(&mut self) -> Option<Stmt> {
         match self.cur.ttype() {
-            TokenType::Let => Some(ast::Stmt::Let(self.parse_let_stmt()?)),
-            TokenType::Return => Some(ast::Stmt::Return(self.parse_return_stmt()?)),
-            _ => Some(ast::Stmt::Expr(self.parse_expr_stmt()?)),
+            TokenType::Let => Some(Stmt::Let(self.parse_let_stmt()?)),
+            TokenType::Return => Some(Stmt::Return(self.parse_return_stmt()?)),
+            _ => Some(Stmt::Expr(self.parse_expr_stmt()?)),
         }
     }
 
-    fn parse_let_stmt(&mut self) -> Option<ast::LetStmt> {
+    fn parse_let_stmt(&mut self) -> Option<LetStmt> {
         let token = self.cur.clone(); // the `Let` token
 
         // `Let` must be followed by an identifier
         if !self.expect_peek(TokenType::Ident) {
             return None;
         }
-        let name = ast::Identifier {
+        let name = Identifier {
             token: self.cur.clone(),
             value: self.cur.literal().to_string(),
         };
@@ -118,14 +118,14 @@ impl Parser {
             self.next_token();
         }
 
-        Some(ast::LetStmt {
+        Some(LetStmt {
             token,
             name,
-            value: ast::Expr::Dummy,
+            value: Expr::Dummy,
         })
     }
 
-    fn parse_return_stmt(&mut self) -> Option<ast::ReturnStmt> {
+    fn parse_return_stmt(&mut self) -> Option<ReturnStmt> {
         let token = self.cur.clone(); // the `Return` token
         self.next_token();
 
@@ -134,13 +134,13 @@ impl Parser {
             self.next_token();
         }
 
-        Some(ast::ReturnStmt {
+        Some(ReturnStmt {
             token,
-            return_value: ast::Expr::Dummy,
+            return_value: Expr::Dummy,
         })
     }
 
-    fn parse_expr_stmt(&mut self) -> Option<ast::ExprStmt> {
+    fn parse_expr_stmt(&mut self) -> Option<ExprStmt> {
         let token = self.cur.clone();
         let expr = self.parse_expr(Precedence::Lowest)?;
 
@@ -151,10 +151,10 @@ impl Parser {
             self.next_token();
         }
 
-        Some(ast::ExprStmt { token, expr })
+        Some(ExprStmt { token, expr })
     }
 
-    fn parse_expr(&mut self, precedence: Precedence) -> Option<ast::Expr> {
+    fn parse_expr(&mut self, precedence: Precedence) -> Option<Expr> {
         // clippy suggests this one-liner:
         // self.prefix_parse_fns.get(self.cur.ttype()).map(|f| f(self))
         // But it does not work, since closure requires unique access to self,
@@ -167,17 +167,17 @@ impl Parser {
         }
     }
 
-    fn parse_identifier(&mut self) -> Option<ast::Expr> {
-        Some(ast::Expr::Ident(ast::Identifier {
+    fn parse_identifier(&mut self) -> Option<Expr> {
+        Some(Expr::Ident(Identifier {
             token: self.cur.clone(),
             value: self.cur.literal().to_string(),
         }))
     }
 
-    fn parse_int_literal(&mut self) -> Option<ast::Expr> {
+    fn parse_int_literal(&mut self) -> Option<Expr> {
         let token = self.cur.clone();
         match self.cur.literal().parse::<i32>() {
-            Ok(value) => Some(ast::Expr::Int(ast::IntLiteral { token, value })),
+            Ok(value) => Some(Expr::Int(IntLiteral { token, value })),
             Err(_) => {
                 self.errors
                     .push(ParseError::ParseIntError(self.cur.literal().to_string()));
@@ -227,7 +227,7 @@ enum ParseError {
 mod tests {
     use super::*;
 
-    fn parser_helper(input: &str) -> (Vec<ast::Stmt>, Vec<ParseError>) {
+    fn parser_helper(input: &str) -> (Vec<Stmt>, Vec<ParseError>) {
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
@@ -252,13 +252,13 @@ let foobar = 838383;
         for (s, (x, n)) in stmts.into_iter().zip(expected.into_iter()) {
             assert_eq!(
                 s,
-                ast::Stmt::Let(ast::LetStmt {
+                Stmt::Let(LetStmt {
                     token: Token::new(TokenType::Let, "let"),
-                    name: ast::Identifier {
+                    name: Identifier {
                         token: Token::new(TokenType::Ident, x),
                         value: x.to_string(),
                     },
-                    value: ast::Expr::Int(ast::IntLiteral {
+                    value: Expr::Int(IntLiteral {
                         token: Token::new(TokenType::Int, n),
                         value: n.parse().unwrap()
                     })
@@ -307,9 +307,9 @@ return 993322;
         for (s, n) in stmts.into_iter().zip(expected.into_iter()) {
             assert_eq!(
                 s,
-                ast::Stmt::Return(ast::ReturnStmt {
+                Stmt::Return(ReturnStmt {
                     token: Token::new(TokenType::Return, "return"),
-                    return_value: ast::Expr::Int(ast::IntLiteral {
+                    return_value: Expr::Int(IntLiteral {
                         token: Token::new(TokenType::Int, n),
                         value: n.parse().unwrap(),
                     })
@@ -327,9 +327,9 @@ return 993322;
 
         assert_eq!(
             stmts[0],
-            ast::Stmt::Expr(ast::ExprStmt {
+            Stmt::Expr(ExprStmt {
                 token: Token::new(TokenType::Ident, "foobar"),
-                expr: ast::Expr::Ident(ast::Identifier {
+                expr: Expr::Ident(Identifier {
                     token: Token::new(TokenType::Ident, "foobar"),
                     value: "foobar".to_string()
                 })
@@ -346,9 +346,9 @@ return 993322;
 
         assert_eq!(
             stmts[0],
-            ast::Stmt::Expr(ast::ExprStmt {
+            Stmt::Expr(ExprStmt {
                 token: Token::new(TokenType::Int, "5"),
-                expr: ast::Expr::Int(ast::IntLiteral {
+                expr: Expr::Int(IntLiteral {
                     token: Token::new(TokenType::Int, "5"),
                     value: 5
                 })
