@@ -42,6 +42,7 @@ impl fmt::Display for Stmt {
 /// Expressions
 pub enum Expr {
     Ident(Identifier),
+    Int(IntLiteral),
     // TODO: this is a placeholder variant before we can parse valid expressions
     Dummy,
 }
@@ -50,7 +51,8 @@ impl Node for Expr {
     fn token_literal(&self) -> String {
         match self {
             Self::Ident(e) => e.token_literal(),
-            _ => todo!(),
+            Self::Int(e) => e.token_literal(),
+            Self::Dummy => todo!(),
         }
     }
 }
@@ -59,7 +61,8 @@ impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Ident(e) => write!(f, "{}", e)?,
-            _ => todo!(),
+            Self::Int(e) => write!(f, "{}", e)?,
+            Self::Dummy => todo!(),
         }
         Ok(())
     }
@@ -184,6 +187,27 @@ impl Node for ExprStmt {
 impl fmt::Display for ExprStmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.expr)
+    }
+}
+
+/// An integer literal like `5`.
+pub struct IntLiteral {
+    /// A token like `Token { Int, "5" }`
+    pub token: Token,
+
+    /// The value of the integer
+    pub value: i32,
+}
+
+impl Node for IntLiteral {
+    fn token_literal(&self) -> String {
+        self.token.literal().to_string()
+    }
+}
+
+impl fmt::Display for IntLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.token_literal())
     }
 }
 

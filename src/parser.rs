@@ -5,7 +5,7 @@ use crate::ast;
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 
-type PrefixParseFn = fn(&mut Parser) -> ast::Expr;
+type PrefixParseFn = fn(&mut Parser) -> Option<ast::Expr>;
 type InfixParseFn = fn(&mut Parser, ast::Expr) -> ast::Expr;
 
 enum Precedence {
@@ -52,6 +52,7 @@ impl Parser {
         };
 
         ret.register_prefix(TokenType::Ident, Self::parse_identifier);
+        ret.register_prefix(TokenType::Int, Self::parse_int_literal);
 
         ret
     }
@@ -161,17 +162,30 @@ impl Parser {
         // Instead, we must end this borrow by extracting `f` first.
         #[allow(clippy::manual_map)]
         if let Some(f) = self.prefix_parse_fns.get(self.cur.ttype()) {
-            Some(f(self))
+            f(self)
         } else {
             None
         }
     }
 
-    fn parse_identifier(&mut self) -> ast::Expr {
-        ast::Expr::Ident(ast::Identifier {
+    fn parse_identifier(&mut self) -> Option<ast::Expr> {
+        Some(ast::Expr::Ident(ast::Identifier {
             token: self.cur.clone(),
             value: self.cur.literal().to_string(),
-        })
+        }))
+    }
+
+    fn parse_int_literal(&mut self) -> Option<ast::Expr> {
+        let token = self.cur.clone();
+        match self.cur.literal().parse::<i32>() {
+            Ok(value) => Some(ast::Expr::Int(ast::IntLiteral { token, value })),
+            Err(_) => {
+                self.errors.push(ParseError::ParseIntError {
+                    s: self.cur.literal().to_string(),
+                });
+                None
+            }
+        }
     }
 
     fn cur_token_is(&self, t: TokenType) -> bool {
@@ -197,7 +211,7 @@ impl Parser {
 
     /// Append to errors if the next token is not expected.
     fn peek_error(&mut self, t: TokenType) {
-        let e = ParseError {
+        let e = ParseError::UnexpectedToken {
             expected: t,
             got: *self.peek.ttype(),
         };
@@ -206,9 +220,9 @@ impl Parser {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct ParseError {
-    expected: TokenType,
-    got: TokenType,
+enum ParseError {
+    UnexpectedToken { expected: TokenType, got: TokenType },
+    ParseIntError { s: String },
 }
 
 #[cfg(test)]
@@ -252,26 +266,25 @@ let 838383;
 ";
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-        assert!(program.stmts.is_empty()); // no valid statements
+        parser.parse_program();
         let mut errors = parser.errors.iter();
         assert_eq!(
             errors.next().unwrap(),
-            &ParseError {
+            &ParseError::UnexpectedToken {
                 expected: TokenType::Assign,
                 got: TokenType::Int,
             }
         );
         assert_eq!(
             errors.next().unwrap(),
-            &ParseError {
+            &ParseError::UnexpectedToken {
                 expected: TokenType::Ident,
                 got: TokenType::Assign,
             }
         );
         assert_eq!(
             errors.next().unwrap(),
-            &ParseError {
+            &ParseError::UnexpectedToken {
                 expected: TokenType::Ident,
                 got: TokenType::Int,
             }
@@ -314,5 +327,40 @@ return 993322;
         assert_eq!(e.token_literal(), "foobar");
 
         assert!(stmts.next().is_none());
+    }
+
+    #[test]
+    fn int_literal_expr() {
+        let input = "5;";
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        let mut stmts = program.stmts.iter();
+
+        let s = stmts.next().unwrap();
+        let Stmt::Expr(s) = s else { panic!() };
+        let Expr::Int(e) = &s.expr else { panic!() };
+        assert_eq!(e.value, 5);
+        assert_eq!(e.token_literal(), "5");
+
+        assert!(stmts.next().is_none());
+    }
+
+    #[test]
+    fn too_big_int() {
+        let input = "100000000000000000000000";
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        parser.parse_program();
+        let mut errors = parser.errors.iter();
+
+        assert_eq!(
+            errors.next().unwrap(),
+            &ParseError::ParseIntError {
+                s: input.to_string()
+            }
+        );
+
+        assert!(errors.next().is_none());
     }
 }
