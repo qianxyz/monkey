@@ -29,7 +29,7 @@ struct Parser {
     peek: Token,
 
     /// collection of errors
-    errors: Vec<ParserError>,
+    errors: Vec<ParseError>,
 
     prefix_parse_fns: HashMap<TokenType, PrefixParseFn>,
 
@@ -81,6 +81,12 @@ impl Parser {
         ast::Program { stmts }
     }
 
+    // ? Most of the parsing functions return Option<ast::Stmt>, which is None
+    // when we encounter a parsing error. The error itself, however,
+    // is not returned directly, and instead is handled by `Parser::peek_error`.
+    // This grants more flexibility, e.g., raising multiple errors
+    // in one parsing function; If such need never rises at the end,
+    // maybe it's better to be explicit by returning Result<Stmt, ParseError>.
     fn parse_stmt(&mut self) -> Option<ast::Stmt> {
         match self.cur.ttype() {
             TokenType::Let => Some(ast::Stmt::Let(self.parse_let_stmt()?)),
@@ -89,12 +95,7 @@ impl Parser {
         }
     }
 
-    // TODO: this function returning None means we have a ParserError.
-    // Since every let statement is either an ast::LetStmt or a ParserError,
-    // it may be better to return Result<> here.
     fn parse_let_stmt(&mut self) -> Option<ast::LetStmt> {
-        // TODO: token owns a String, so we have to explicitly clone here.
-        // maybe it can just hold a reference &str so it can be copied.
         let token = self.cur.clone(); // the `Let` token
 
         // `Let` must be followed by an identifier
@@ -124,7 +125,7 @@ impl Parser {
     }
 
     fn parse_return_stmt(&mut self) -> Option<ast::ReturnStmt> {
-        let token = self.cur.clone();
+        let token = self.cur.clone(); // the `Return` token
         self.next_token();
 
         // TODO: we skip parsing the expression for now
@@ -181,8 +182,9 @@ impl Parser {
         self.peek.ttype() == &t
     }
 
-    /// An `assertion function`, where we only advance parse point
-    /// if the next token is of expected type.
+    /// An `assertion function`.
+    /// If the next token is of expected type, advance parse point;
+    /// Otherwise, report a ParseError.
     fn expect_peek(&mut self, t: TokenType) -> bool {
         if self.peek_token_is(t) {
             self.next_token();
@@ -195,7 +197,7 @@ impl Parser {
 
     /// Append to errors if the next token is not expected.
     fn peek_error(&mut self, t: TokenType) {
-        let e = ParserError {
+        let e = ParseError {
             expected: t,
             got: *self.peek.ttype(),
         };
@@ -204,7 +206,7 @@ impl Parser {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct ParserError {
+struct ParseError {
     expected: TokenType,
     got: TokenType,
 }
@@ -255,21 +257,21 @@ let 838383;
         let mut errors = parser.errors.iter();
         assert_eq!(
             errors.next().unwrap(),
-            &ParserError {
+            &ParseError {
                 expected: TokenType::Assign,
                 got: TokenType::Int,
             }
         );
         assert_eq!(
             errors.next().unwrap(),
-            &ParserError {
+            &ParseError {
                 expected: TokenType::Ident,
                 got: TokenType::Assign,
             }
         );
         assert_eq!(
             errors.next().unwrap(),
-            &ParserError {
+            &ParseError {
                 expected: TokenType::Ident,
                 got: TokenType::Int,
             }
