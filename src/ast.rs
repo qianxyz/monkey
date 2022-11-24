@@ -46,6 +46,7 @@ pub enum Expr {
     Ident(Identifier),
     Int(IntLiteral),
     Prefix(PrefixExpr),
+    Infix(InfixExpr),
     // TODO: this is a placeholder variant before we can parse valid expressions
     Dummy,
 }
@@ -56,6 +57,7 @@ impl Node for Expr {
             Self::Ident(e) => e.token_literal(),
             Self::Int(e) => e.token_literal(),
             Self::Prefix(e) => e.token_literal(),
+            Self::Infix(e) => e.token_literal(),
             Self::Dummy => todo!(),
         }
     }
@@ -67,6 +69,7 @@ impl fmt::Display for Expr {
             Self::Ident(e) => write!(f, "{}", e)?,
             Self::Int(e) => write!(f, "{}", e)?,
             Self::Prefix(e) => write!(f, "{}", e)?,
+            Self::Infix(e) => write!(f, "{}", e)?,
             Self::Dummy => todo!(),
         }
         Ok(())
@@ -244,6 +247,34 @@ impl Node for PrefixExpr {
 impl fmt::Display for PrefixExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}{})", self.op, self.right)
+    }
+}
+
+/// An infix expression like `5 + 5`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct InfixExpr {
+    /// The operator token, e.g., `+`
+    pub token: Token,
+
+    /// The expression on the left
+    pub left: Box<Expr>,
+
+    /// The operator
+    pub op: String,
+
+    /// The expression on the right
+    pub right: Box<Expr>,
+}
+
+impl Node for InfixExpr {
+    fn token_literal(&self) -> &str {
+        self.token.literal()
+    }
+}
+
+impl fmt::Display for InfixExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({} {} {})", self.left, self.op, self.right)
     }
 }
 
