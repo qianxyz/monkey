@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 use std::mem;
 
-use crate::ast::{
-    Expr, ExprStmt, Identifier, InfixExpr, IntLiteral, LetStmt, PrefixExpr, Program, ReturnStmt,
-    Stmt,
-};
+use crate::ast::*;
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 
@@ -191,8 +188,11 @@ impl Parser {
         };
         let mut left = f(self)?;
 
-        while !self.peek_token_is(TokenType::Semicolon) && precedence < self.peek_precedence() {
+        // NOTE: this precedence check covers more cases, e.g., when we peek
+        // a semicolon or eof, since their precedence would be LOWEST.
+        while precedence < self.peek_precedence() {
             let Some(&g) = self.infix_parse_fns.get(self.peek.ttype()) else {
+                // TODO: maybe we should have a `ParseError::NoInfixParseFn`?
                 return Some(left);
             };
             self.next_token();
