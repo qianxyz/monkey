@@ -17,6 +17,7 @@ pub enum Stmt {
     Let(LetStmt),
     Return(ReturnStmt),
     Expr(ExprStmt),
+    Block(BlockStmt),
 }
 
 impl Node for Stmt {
@@ -25,6 +26,7 @@ impl Node for Stmt {
             Self::Let(s) => s.token_literal(),
             Self::Return(s) => s.token_literal(),
             Self::Expr(s) => s.token_literal(),
+            Self::Block(s) => s.token_literal(),
         }
     }
 }
@@ -35,6 +37,7 @@ impl fmt::Display for Stmt {
             Self::Let(s) => write!(f, "{}", s),
             Self::Return(s) => write!(f, "{}", s),
             Self::Expr(s) => write!(f, "{}", s),
+            Self::Block(s) => write!(f, "{}", s),
         }
     }
 }
@@ -47,6 +50,7 @@ pub enum Expr {
     Prefix(PrefixExpr),
     Infix(InfixExpr),
     Bool(Boolean),
+    If(IfExpr),
     // TODO: this is a placeholder variant before we can parse valid expressions
     Dummy,
 }
@@ -59,6 +63,7 @@ impl Node for Expr {
             Self::Prefix(e) => e.token_literal(),
             Self::Infix(e) => e.token_literal(),
             Self::Bool(e) => e.token_literal(),
+            Self::If(e) => e.token_literal(),
             Self::Dummy => todo!(),
         }
     }
@@ -72,6 +77,7 @@ impl fmt::Display for Expr {
             Self::Prefix(e) => write!(f, "{}", e),
             Self::Infix(e) => write!(f, "{}", e),
             Self::Bool(e) => write!(f, "{}", e),
+            Self::If(e) => write!(f, "{}", e),
             Self::Dummy => todo!(),
         }
     }
@@ -298,6 +304,63 @@ impl Node for Boolean {
 impl fmt::Display for Boolean {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.token_literal())
+    }
+}
+
+/// An `if` expression.
+#[derive(Debug, PartialEq, Eq)]
+pub struct IfExpr {
+    /// This should always be `Token { If, "if" }`
+    pub token: Token,
+
+    /// The condition controlling which branch to go into.
+    pub condition: Box<Expr>,
+
+    /// The block when condition is true.
+    pub consequence: BlockStmt,
+
+    /// The optional block when condition is false.
+    pub alternative: Option<BlockStmt>,
+}
+
+impl Node for IfExpr {
+    fn token_literal(&self) -> &str {
+        self.token.literal()
+    }
+}
+
+impl fmt::Display for IfExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "if {} {}", self.condition, self.consequence)?;
+        if let Some(s) = &self.alternative {
+            write!(f, " else {}", s)?;
+        }
+        Ok(())
+    }
+}
+
+/// A block of statements, surrounded by `{}`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct BlockStmt {
+    /// This should always be `{`
+    pub token: Token,
+
+    /// A collection of statements
+    pub stmts: Vec<Stmt>,
+}
+
+impl Node for BlockStmt {
+    fn token_literal(&self) -> &str {
+        self.token.literal()
+    }
+}
+
+impl fmt::Display for BlockStmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for s in &self.stmts {
+            write!(f, "{}", s)?;
+        }
+        Ok(())
     }
 }
 

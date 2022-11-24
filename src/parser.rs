@@ -73,6 +73,7 @@ impl Parser {
         ret.register_prefix(TokenType::True, Self::parse_boolean);
         ret.register_prefix(TokenType::False, Self::parse_boolean);
         ret.register_prefix(TokenType::LParen, Self::parse_grouped_expr);
+        ret.register_prefix(TokenType::If, Self::parse_if_expr);
 
         ret.register_infix(TokenType::Plus, Self::parse_infix_expr);
         ret.register_infix(TokenType::Minus, Self::parse_infix_expr);
@@ -271,6 +272,62 @@ impl Parser {
         }
 
         expr
+    }
+
+    fn parse_if_expr(&mut self) -> Option<Expr> {
+        let cur = self.cur.clone();
+
+        // `if` must be followed by a `(` ...
+        if !self.expect_peek(TokenType::LParen) {
+            return None;
+        }
+
+        self.next_token();
+        let condition = self.parse_expr(Precedence::Lowest)?;
+
+        // ... then closed by a `)`
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+
+        // the consequence must be enclosed in curly braces
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
+
+        // this handles the closing curly brace
+        let consequence = self.parse_block_stmt()?;
+
+        let alternative = if self.peek_token_is(TokenType::Else) {
+            self.next_token();
+            if !self.expect_peek(TokenType::LBrace) {
+                return None;
+            }
+            Some(self.parse_block_stmt())?
+        } else {
+            None
+        };
+
+        Some(Expr::If(IfExpr {
+            token: cur,
+            condition: condition.into(),
+            consequence,
+            alternative,
+        }))
+    }
+
+    fn parse_block_stmt(&mut self) -> Option<BlockStmt> {
+        let cur = self.cur.clone();
+        let mut stmts = Vec::new();
+
+        self.next_token();
+
+        while !self.cur_token_is(TokenType::RBrace) && !self.cur.is_eof() {
+            stmts.push(self.parse_stmt()?);
+            self.next_token();
+        }
+
+        Some(BlockStmt { token: cur, stmts })
     }
 
     fn cur_token_is(&self, t: TokenType) -> bool {
@@ -596,5 +653,102 @@ return 993322;
                 })
             )
         }
+    }
+
+    #[test]
+    fn if_expr() {
+        let input = "if (x < y) { x }";
+        let (stmts, errors) = parser_helper(input);
+
+        assert_eq!(
+            stmts[0],
+            Stmt::Expr(ExprStmt {
+                token: Token::new(TokenType::If, "if"),
+                expr: Expr::If(IfExpr {
+                    token: Token::new(TokenType::If, "if"),
+                    condition: Expr::Infix(InfixExpr {
+                        token: Token::new(TokenType::LT, "<"),
+                        left: Expr::Ident(Identifier {
+                            token: Token::new(TokenType::Ident, "x"),
+                            value: "x".to_string()
+                        })
+                        .into(),
+                        op: "<".to_string(),
+                        right: Expr::Ident(Identifier {
+                            token: Token::new(TokenType::Ident, "y"),
+                            value: "y".to_string()
+                        })
+                        .into(),
+                    })
+                    .into(),
+                    consequence: BlockStmt {
+                        token: Token::new(TokenType::LBrace, "{"),
+                        stmts: vec![Stmt::Expr(ExprStmt {
+                            token: Token::new(TokenType::Ident, "x"),
+                            expr: Expr::Ident(Identifier {
+                                token: Token::new(TokenType::Ident, "x"),
+                                value: "x".to_string()
+                            })
+                        })]
+                    },
+                    alternative: None
+                })
+            })
+        );
+        assert_eq!(errors.first(), None);
+        assert_eq!(stmts.len(), 1);
+    }
+
+    #[test]
+    fn if_else_expr() {
+        let input = "if (x < y) { x } else { y }";
+        let (stmts, errors) = parser_helper(input);
+
+        assert_eq!(
+            stmts[0],
+            Stmt::Expr(ExprStmt {
+                token: Token::new(TokenType::If, "if"),
+                expr: Expr::If(IfExpr {
+                    token: Token::new(TokenType::If, "if"),
+                    condition: Expr::Infix(InfixExpr {
+                        token: Token::new(TokenType::LT, "<"),
+                        left: Expr::Ident(Identifier {
+                            token: Token::new(TokenType::Ident, "x"),
+                            value: "x".to_string()
+                        })
+                        .into(),
+                        op: "<".to_string(),
+                        right: Expr::Ident(Identifier {
+                            token: Token::new(TokenType::Ident, "y"),
+                            value: "y".to_string()
+                        })
+                        .into(),
+                    })
+                    .into(),
+                    consequence: BlockStmt {
+                        token: Token::new(TokenType::LBrace, "{"),
+                        stmts: vec![Stmt::Expr(ExprStmt {
+                            token: Token::new(TokenType::Ident, "x"),
+                            expr: Expr::Ident(Identifier {
+                                token: Token::new(TokenType::Ident, "x"),
+                                value: "x".to_string()
+                            })
+                        })]
+                    },
+                    alternative: Some(BlockStmt {
+                        token: Token::new(TokenType::LBrace, "{"),
+                        stmts: vec![Stmt::Expr(ExprStmt {
+                            token: Token::new(TokenType::Ident, "y"),
+                            expr: Expr::Ident(Identifier {
+                                token: Token::new(TokenType::Ident, "y"),
+                                value: "y".to_string()
+                            })
+                        })]
+                    }),
+                })
+            })
+        );
+        assert_eq!(errors.first(), None);
+        assert_eq!(stmts.len(), 1);
     }
 }
