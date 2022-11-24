@@ -573,4 +573,28 @@ return 993322;
             assert_eq!(program.to_string(), expect);
         }
     }
+
+    #[test]
+    fn boolean_expr() {
+        let inputs = [
+            ("true;", TokenType::True, true),
+            ("false", TokenType::False, false),
+        ];
+
+        for (input, ttype, b) in inputs {
+            let (stmts, errors) = parser_helper(input);
+            assert_eq!(errors.first(), None);
+            assert_eq!(stmts.len(), 1);
+            assert_eq!(
+                stmts[0],
+                Stmt::Expr(ExprStmt {
+                    token: Token::new(ttype, &b.to_string()),
+                    expr: Expr::Bool(Boolean {
+                        token: Token::new(ttype, &b.to_string()),
+                        value: b
+                    })
+                })
+            )
+        }
+    }
 }
