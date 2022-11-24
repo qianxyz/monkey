@@ -32,11 +32,10 @@ impl Node for Stmt {
 impl fmt::Display for Stmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Let(s) => write!(f, "{}", s)?,
-            Self::Return(s) => write!(f, "{}", s)?,
-            Self::Expr(s) => write!(f, "{}", s)?,
+            Self::Let(s) => write!(f, "{}", s),
+            Self::Return(s) => write!(f, "{}", s),
+            Self::Expr(s) => write!(f, "{}", s),
         }
-        Ok(())
     }
 }
 
@@ -66,13 +65,12 @@ impl Node for Expr {
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Ident(e) => write!(f, "{}", e)?,
-            Self::Int(e) => write!(f, "{}", e)?,
-            Self::Prefix(e) => write!(f, "{}", e)?,
-            Self::Infix(e) => write!(f, "{}", e)?,
+            Self::Ident(e) => write!(f, "{}", e),
+            Self::Int(e) => write!(f, "{}", e),
+            Self::Prefix(e) => write!(f, "{}", e),
+            Self::Infix(e) => write!(f, "{}", e),
             Self::Dummy => todo!(),
         }
-        Ok(())
     }
 }
 

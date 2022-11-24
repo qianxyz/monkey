@@ -159,11 +159,8 @@ impl Parser {
     }
 
     fn parse_expr(&mut self, precedence: Precedence) -> Option<Expr> {
-        // clippy suggests this one-liner:
-        // self.prefix_parse_fns.get(self.cur.ttype()).map(|f| f(self))
-        // But it does not work, since closure requires unique access to self,
-        // but self is already borrowed by accessing `prefix_parse_fn`.
-        // Instead, we must end this borrow by extracting `f` first.
+        // `map` doesn't work here; we must extract `f` (func pointer is Copy)
+        // and end the first self borrow before calling `f(self)`.
         if let Some(f) = self.prefix_parse_fns.get(self.cur.ttype()) {
             f(self)
         } else {
