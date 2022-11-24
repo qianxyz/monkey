@@ -74,6 +74,7 @@ impl Parser {
         ret.register_prefix(TokenType::False, Self::parse_boolean);
         ret.register_prefix(TokenType::LParen, Self::parse_grouped_expr);
         ret.register_prefix(TokenType::If, Self::parse_if_expr);
+        ret.register_prefix(TokenType::Function, Self::parse_func_literal);
 
         ret.register_infix(TokenType::Plus, Self::parse_infix_expr);
         ret.register_infix(TokenType::Minus, Self::parse_infix_expr);
@@ -328,6 +329,65 @@ impl Parser {
         }
 
         Some(BlockStmt { token: cur, stmts })
+    }
+
+    fn parse_func_literal(&mut self) -> Option<Expr> {
+        let token = self.cur.clone();
+
+        if !self.expect_peek(TokenType::LParen) {
+            return None;
+        }
+
+        // this takes care of `)`
+        let params = self.parse_func_params()?;
+
+        if !self.expect_peek(TokenType::LBrace) {
+            return None;
+        }
+
+        let body = self.parse_block_stmt()?;
+
+        Some(Expr::Fn(FuncLiteral {
+            token,
+            params,
+            body,
+        }))
+    }
+
+    fn parse_func_params(&mut self) -> Option<Vec<Identifier>> {
+        let mut idents = Vec::new();
+
+        // no parameters
+        if self.peek_token_is(TokenType::RParen) {
+            self.next_token();
+            return Some(idents);
+        }
+
+        // get the first parameter
+        self.next_token();
+        let ident = Identifier {
+            token: self.cur.clone(),
+            value: self.cur.literal().to_string(),
+        };
+        idents.push(ident);
+
+        // if there are more, separated by commas
+        while self.peek_token_is(TokenType::Comma) {
+            // advance twice so cur points to the identifier
+            self.next_token();
+            self.next_token();
+            let ident = Identifier {
+                token: self.cur.clone(),
+                value: self.cur.literal().to_string(),
+            };
+            idents.push(ident);
+        }
+
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+
+        Some(idents)
     }
 
     fn cur_token_is(&self, t: TokenType) -> bool {
@@ -750,5 +810,84 @@ return 993322;
         );
         assert_eq!(errors.first(), None);
         assert_eq!(stmts.len(), 1);
+    }
+
+    #[test]
+    fn function_literal() {
+        let input = "fn(x, y) { x + y; }";
+        let (stmts, _) = parser_helper(input);
+
+        assert_eq!(
+            stmts[0],
+            Stmt::Expr(ExprStmt {
+                token: Token::new(TokenType::Function, "fn"),
+                expr: Expr::Fn(FuncLiteral {
+                    token: Token::new(TokenType::Function, "fn"),
+                    params: vec![
+                        Identifier {
+                            token: Token::new(TokenType::Ident, "x"),
+                            value: "x".to_string()
+                        },
+                        Identifier {
+                            token: Token::new(TokenType::Ident, "y"),
+                            value: "y".to_string()
+                        },
+                    ],
+                    body: BlockStmt {
+                        token: Token::new(TokenType::LBrace, "{"),
+                        stmts: vec![Stmt::Expr(ExprStmt {
+                            token: Token::new(TokenType::Ident, "x"),
+                            expr: Expr::Infix(InfixExpr {
+                                token: Token::new(TokenType::Plus, "+"),
+                                left: Expr::Ident(Identifier {
+                                    token: Token::new(TokenType::Ident, "x"),
+                                    value: "x".to_string()
+                                })
+                                .into(),
+                                op: "+".to_string(),
+                                right: Expr::Ident(Identifier {
+                                    token: Token::new(TokenType::Ident, "y"),
+                                    value: "y".to_string()
+                                })
+                                .into(),
+                            })
+                        })]
+                    }
+                })
+            })
+        );
+    }
+
+    #[test]
+    fn func_params() {
+        let cases = [
+            ("fn() {};", vec![]),
+            ("fn(x) {};", vec!["x"]),
+            ("fn(x, y, z) {};", vec!["x", "y", "z"]),
+        ];
+
+        for (input, params) in cases {
+            let (stmts, _) = parser_helper(input);
+            assert_eq!(
+                stmts[0],
+                Stmt::Expr(ExprStmt {
+                    token: Token::new(TokenType::Function, "fn"),
+                    expr: Expr::Fn(FuncLiteral {
+                        token: Token::new(TokenType::Function, "fn"),
+                        params: params
+                            .iter()
+                            .map(|x| Identifier {
+                                token: Token::new(TokenType::Ident, x),
+                                value: x.to_string()
+                            })
+                            .collect(),
+                        body: BlockStmt {
+                            token: Token::new(TokenType::LBrace, "{"),
+                            stmts: vec![]
+                        }
+                    })
+                })
+            );
+        }
     }
 }

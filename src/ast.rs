@@ -51,6 +51,7 @@ pub enum Expr {
     Infix(InfixExpr),
     Bool(Boolean),
     If(IfExpr),
+    Fn(FuncLiteral),
     // TODO: this is a placeholder variant before we can parse valid expressions
     Dummy,
 }
@@ -64,6 +65,7 @@ impl Node for Expr {
             Self::Infix(e) => e.token_literal(),
             Self::Bool(e) => e.token_literal(),
             Self::If(e) => e.token_literal(),
+            Self::Fn(e) => e.token_literal(),
             Self::Dummy => todo!(),
         }
     }
@@ -78,6 +80,7 @@ impl fmt::Display for Expr {
             Self::Infix(e) => write!(f, "{}", e),
             Self::Bool(e) => write!(f, "{}", e),
             Self::If(e) => write!(f, "{}", e),
+            Self::Fn(e) => write!(f, "{}", e),
             Self::Dummy => todo!(),
         }
     }
@@ -361,6 +364,41 @@ impl fmt::Display for BlockStmt {
             write!(f, "{}", s)?;
         }
         Ok(())
+    }
+}
+
+/// A function, like `fn(x, y) { return x + y; }`
+#[derive(Debug, PartialEq, Eq)]
+pub struct FuncLiteral {
+    /// This should always be `fn`
+    pub token: Token,
+
+    /// The parameters of the function
+    pub params: Vec<Identifier>,
+
+    /// The body of the function
+    pub body: BlockStmt,
+}
+
+impl Node for FuncLiteral {
+    fn token_literal(&self) -> &str {
+        self.token.literal()
+    }
+}
+
+impl fmt::Display for FuncLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}({}) {}",
+            self.token_literal(),
+            self.params
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            self.body
+        )
     }
 }
 
