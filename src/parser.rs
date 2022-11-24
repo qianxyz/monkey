@@ -70,6 +70,9 @@ impl Parser {
         ret.register_prefix(TokenType::Bang, Self::parse_prefix_expr);
         ret.register_prefix(TokenType::Minus, Self::parse_prefix_expr);
 
+        ret.register_prefix(TokenType::True, Self::parse_boolean);
+        ret.register_prefix(TokenType::False, Self::parse_boolean);
+
         ret.register_infix(TokenType::Plus, Self::parse_infix_expr);
         ret.register_infix(TokenType::Minus, Self::parse_infix_expr);
         ret.register_infix(TokenType::Asterisk, Self::parse_infix_expr);
@@ -247,6 +250,13 @@ impl Parser {
             left: left.into(),
             op,
             right: right.into(),
+        }))
+    }
+
+    fn parse_boolean(&mut self) -> Option<Expr> {
+        Some(Expr::Bool(Boolean {
+            token: self.cur.clone(),
+            value: self.cur_token_is(TokenType::True),
         }))
     }
 

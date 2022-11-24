@@ -46,6 +46,7 @@ pub enum Expr {
     Int(IntLiteral),
     Prefix(PrefixExpr),
     Infix(InfixExpr),
+    Bool(Boolean),
     // TODO: this is a placeholder variant before we can parse valid expressions
     Dummy,
 }
@@ -57,6 +58,7 @@ impl Node for Expr {
             Self::Int(e) => e.token_literal(),
             Self::Prefix(e) => e.token_literal(),
             Self::Infix(e) => e.token_literal(),
+            Self::Bool(e) => e.token_literal(),
             Self::Dummy => todo!(),
         }
     }
@@ -69,6 +71,7 @@ impl fmt::Display for Expr {
             Self::Int(e) => write!(f, "{}", e),
             Self::Prefix(e) => write!(f, "{}", e),
             Self::Infix(e) => write!(f, "{}", e),
+            Self::Bool(e) => write!(f, "{}", e),
             Self::Dummy => todo!(),
         }
     }
@@ -273,6 +276,28 @@ impl Node for InfixExpr {
 impl fmt::Display for InfixExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({} {} {})", self.left, self.op, self.right)
+    }
+}
+
+/// A boolean literal.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Boolean {
+    /// The token `true` or `false`.
+    pub token: Token,
+
+    /// The literal value.
+    pub value: bool,
+}
+
+impl Node for Boolean {
+    fn token_literal(&self) -> &str {
+        self.token.literal()
+    }
+}
+
+impl fmt::Display for Boolean {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.token_literal())
     }
 }
 
