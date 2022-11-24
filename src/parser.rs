@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::mem;
 
-use crate::ast::{Expr, ExprStmt, Identifier, IntLiteral, LetStmt, Program, ReturnStmt, Stmt};
+use crate::ast::{
+    Expr, ExprStmt, Identifier, IntLiteral, LetStmt, PrefixExpr, Program, ReturnStmt, Stmt,
+};
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 
@@ -53,6 +55,8 @@ impl Parser {
 
         ret.register_prefix(TokenType::Ident, Self::parse_identifier);
         ret.register_prefix(TokenType::Int, Self::parse_int_literal);
+        ret.register_prefix(TokenType::Bang, Self::parse_prefix_expr);
+        ret.register_prefix(TokenType::Minus, Self::parse_prefix_expr);
 
         ret
     }
@@ -84,7 +88,7 @@ impl Parser {
 
     // ? Most of the parsing functions return Option<ast::Stmt>, which is None
     // when we encounter a parsing error. The error itself, however,
-    // is not returned directly, and instead is handled by `Parser::peek_error`.
+    // is not returned directly, and instead is handled by each function.
     // This grants more flexibility, e.g., raising multiple errors
     // in one parsing function; If such need never rises at the end,
     // maybe it's better to be explicit by returning Result<Stmt, ParseError>.
@@ -163,6 +167,7 @@ impl Parser {
         if let Some(f) = self.prefix_parse_fns.get(self.cur.ttype()) {
             f(self)
         } else {
+            self.no_prefix_parse_fn_error(*self.cur.ttype());
             None
         }
     }
@@ -186,6 +191,19 @@ impl Parser {
         }
     }
 
+    fn parse_prefix_expr(&mut self) -> Option<Expr> {
+        let cur = self.cur.clone();
+        let op = cur.literal().to_string();
+        self.next_token();
+        let right = self.parse_expr(Precedence::Prefix)?;
+
+        Some(Expr::Prefix(PrefixExpr {
+            token: cur,
+            op,
+            right: right.into(),
+        }))
+    }
+
     fn cur_token_is(&self, t: TokenType) -> bool {
         self.cur.ttype() == &t
     }
@@ -194,7 +212,7 @@ impl Parser {
         self.peek.ttype() == &t
     }
 
-    /// An `assertion function`.
+    /// An "assertion function".
     /// If the next token is of expected type, advance parse point;
     /// Otherwise, report a ParseError.
     fn expect_peek(&mut self, t: TokenType) -> bool {
@@ -215,12 +233,19 @@ impl Parser {
         };
         self.errors.push(e);
     }
+
+    /// This happens when parser is to parse an expression, but found
+    /// a token that is not supposed to be a prefix.
+    fn no_prefix_parse_fn_error(&mut self, t: TokenType) {
+        self.errors.push(ParseError::NoPrefixParseFn(t))
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 enum ParseError {
     UnexpectedToken { expected: TokenType, got: TokenType },
     ParseIntError(String),
+    NoPrefixParseFn(TokenType),
 }
 
 #[cfg(test)]
@@ -246,13 +271,10 @@ let foobar = 838383;
 
         let (stmts, errors) = parser_helper(input);
 
-        assert_eq!(stmts.len(), 3);
-        assert!(errors.is_empty());
-
-        for (s, (x, n)) in stmts.into_iter().zip(expected.into_iter()) {
+        for (s, (x, n)) in stmts.iter().zip(expected.into_iter()) {
             assert_eq!(
                 s,
-                Stmt::Let(LetStmt {
+                &Stmt::Let(LetStmt {
                     token: Token::new(TokenType::Let, "let"),
                     name: Identifier {
                         token: Token::new(TokenType::Ident, x),
@@ -265,6 +287,9 @@ let foobar = 838383;
                 })
             )
         }
+
+        assert_eq!(errors.first(), None);
+        assert_eq!(stmts.len(), 3);
     }
 
     #[test]
@@ -278,17 +303,18 @@ let 838383;
         let errs = [(Assign, Int), (Ident, Assign), (Ident, Int)];
 
         let (_, errors) = parser_helper(input);
-        assert_eq!(errors.len(), 3);
 
-        for (e, (l, r)) in errors.into_iter().zip(errs.into_iter()) {
+        for (e, (l, r)) in errors.iter().zip(errs.into_iter()) {
             assert_eq!(
                 e,
-                ParseError::UnexpectedToken {
+                &ParseError::UnexpectedToken {
                     expected: l,
                     got: r,
                 }
             )
         }
+
+        assert_eq!(errors.len(), 3);
     }
 
     #[test]
@@ -301,13 +327,11 @@ return 993322;
         let expected = ["5", "10", "993322"];
 
         let (stmts, errors) = parser_helper(input);
-        assert!(errors.is_empty());
-        assert_eq!(stmts.len(), 3);
 
-        for (s, n) in stmts.into_iter().zip(expected.into_iter()) {
+        for (s, n) in stmts.iter().zip(expected.into_iter()) {
             assert_eq!(
                 s,
-                Stmt::Return(ReturnStmt {
+                &Stmt::Return(ReturnStmt {
                     token: Token::new(TokenType::Return, "return"),
                     return_value: Expr::Int(IntLiteral {
                         token: Token::new(TokenType::Int, n),
@@ -316,14 +340,15 @@ return 993322;
                 })
             )
         }
+
+        assert_eq!(errors.first(), None);
+        assert_eq!(stmts.len(), 3);
     }
 
     #[test]
     fn ident_expr() {
         let input = "foobar;";
         let (stmts, errors) = parser_helper(input);
-        assert!(errors.is_empty());
-        assert_eq!(stmts.len(), 1);
 
         assert_eq!(
             stmts[0],
@@ -334,15 +359,16 @@ return 993322;
                     value: "foobar".to_string()
                 })
             })
-        )
+        );
+
+        assert_eq!(errors.first(), None);
+        assert_eq!(stmts.len(), 1);
     }
 
     #[test]
     fn int_literal_expr() {
         let input = "5;";
         let (stmts, errors) = parser_helper(input);
-        assert!(errors.is_empty());
-        assert_eq!(stmts.len(), 1);
 
         assert_eq!(
             stmts[0],
@@ -353,7 +379,10 @@ return 993322;
                     value: 5
                 })
             })
-        )
+        );
+
+        assert_eq!(errors.first(), None);
+        assert_eq!(stmts.len(), 1);
     }
 
     #[test]
@@ -364,5 +393,31 @@ return 993322;
         assert_eq!(errors.len(), 1);
 
         assert_eq!(errors[0], ParseError::ParseIntError(input.to_string()))
+    }
+
+    #[test]
+    fn prefix_exprs() {
+        use TokenType::*;
+        let inputs = [("!5", Bang, "!", 5), ("-15", Minus, "-", 15)];
+
+        for (input, ttype, op, val) in inputs {
+            let (stmts, errors) = parser_helper(input);
+            assert_eq!(errors.first(), None);
+            assert_eq!(stmts.len(), 1);
+            assert_eq!(
+                stmts[0],
+                Stmt::Expr(ExprStmt {
+                    token: Token::new(ttype, op),
+                    expr: Expr::Prefix(PrefixExpr {
+                        token: Token::new(ttype, op),
+                        op: op.to_string(),
+                        right: Box::new(Expr::Int(IntLiteral {
+                            token: Token::new(TokenType::Int, &val.to_string()),
+                            value: val
+                        }))
+                    })
+                })
+            )
+        }
     }
 }
