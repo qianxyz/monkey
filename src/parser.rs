@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::mem;
 
 use crate::ast::{
-    Expr, ExprStmt, Identifier, IntLiteral, LetStmt, PrefixExpr, Program, ReturnStmt, Stmt,
+    Expr, ExprStmt, Identifier, InfixExpr, IntLiteral, LetStmt, PrefixExpr, Program, ReturnStmt,
+    Stmt,
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
@@ -411,6 +412,45 @@ return 993322;
                         right: Box::new(Expr::Int(IntLiteral {
                             token: Token::new(TokenType::Int, &val.to_string()),
                             value: val
+                        }))
+                    })
+                })
+            )
+        }
+    }
+
+    #[test]
+    fn infix_expr() {
+        use TokenType::*;
+        let inputs = [
+            ("5 + 5;", Plus, "+"),
+            ("5 - 5;", Minus, "-"),
+            ("5 * 5;", Asterisk, "*"),
+            ("5 / 5;", Slash, "/"),
+            ("5 > 5;", GT, ">"),
+            ("5 < 5;", LT, "<"),
+            ("5 == 5;", EQ, "=="),
+            ("5 != 5;", NQ, "!="),
+        ];
+        let five = Token::new(TokenType::Int, "5");
+
+        for (input, ttype, op) in inputs {
+            let (stmts, errors) = parser_helper(input);
+            assert_eq!(errors.first(), None);
+            assert_eq!(
+                stmts[0],
+                Stmt::Expr(ExprStmt {
+                    token: five.clone(),
+                    expr: Expr::Infix(InfixExpr {
+                        token: Token::new(ttype, op),
+                        left: Box::new(Expr::Int(IntLiteral {
+                            token: five.clone(),
+                            value: 5
+                        })),
+                        op: op.to_string(),
+                        right: Box::new(Expr::Int(IntLiteral {
+                            token: five.clone(),
+                            value: 5
                         }))
                     })
                 })
