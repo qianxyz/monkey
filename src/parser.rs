@@ -72,6 +72,7 @@ impl Parser {
 
         ret.register_prefix(TokenType::True, Self::parse_boolean);
         ret.register_prefix(TokenType::False, Self::parse_boolean);
+        ret.register_prefix(TokenType::LParen, Self::parse_grouped_expr);
 
         ret.register_infix(TokenType::Plus, Self::parse_infix_expr);
         ret.register_infix(TokenType::Minus, Self::parse_infix_expr);
@@ -258,6 +259,18 @@ impl Parser {
             token: self.cur.clone(),
             value: self.cur_token_is(TokenType::True),
         }))
+    }
+
+    fn parse_grouped_expr(&mut self) -> Option<Expr> {
+        self.next_token();
+        let expr = self.parse_expr(Precedence::Lowest);
+
+        // this will properly register an error
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+
+        expr
     }
 
     fn cur_token_is(&self, t: TokenType) -> bool {
@@ -546,6 +559,11 @@ return 993322;
                 "3 + 4 * 5 == 3 * 1 + 4 * 5",
                 "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
             ),
+            ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"),
+            ("(5 + 5) * 2", "((5 + 5) * 2)"),
+            ("2 / (5 + 5)", "(2 / (5 + 5))"),
+            ("-(5 + 5)", "(-(5 + 5))"),
+            ("!(true == true)", "(!(true == true))"),
         ];
 
         for (input, expect) in cases {
