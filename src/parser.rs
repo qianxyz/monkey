@@ -33,7 +33,7 @@ impl From<&TokenType> for Precedence {
     }
 }
 
-struct Parser {
+pub struct Parser {
     /// a lexer to spit out tokens
     lexer: Lexer,
 
@@ -52,7 +52,7 @@ struct Parser {
 }
 
 impl Parser {
-    fn new(mut lexer: Lexer) -> Self {
+    pub fn new(mut lexer: Lexer) -> Self {
         // set first two tokens
         let cur = lexer.next_token();
         let peek = lexer.next_token();
@@ -103,7 +103,7 @@ impl Parser {
         self.cur = mem::replace(&mut self.peek, self.lexer.next_token());
     }
 
-    fn parse_program(&mut self) -> Program {
+    pub fn parse_program(&mut self) -> Program {
         let mut stmts = Vec::new();
 
         while !self.cur.is_eof() {
@@ -114,6 +114,10 @@ impl Parser {
         }
 
         Program { stmts }
+    }
+
+    pub fn errors(&self) -> &[ParseError] {
+        &self.errors
     }
 
     // ? Most of the parsing functions return Option<ast::Stmt>, which is None
@@ -472,7 +476,7 @@ impl Parser {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum ParseError {
+pub enum ParseError {
     UnexpectedToken { expected: TokenType, got: TokenType },
     ParseIntError(String),
     NoPrefixParseFn(TokenType),

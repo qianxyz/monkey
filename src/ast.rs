@@ -17,6 +17,10 @@ pub enum Stmt {
     Let(LetStmt),
     Return(ReturnStmt),
     Expr(ExprStmt),
+    // TODO: strangely, this wrapper is never constructed.
+    // everywhere we may have a BlockStmt (the only cases are the branches
+    // of `if` expressions and the body of function literals), we explicitly
+    // requires a BlockStmt instead of wrapping it in Stmt::Block.
     Block(BlockStmt),
 }
 
@@ -53,8 +57,6 @@ pub enum Expr {
     If(IfExpr),
     Fn(FuncLiteral),
     Call(CallExpr),
-    // TODO: this is a placeholder variant before we can parse valid expressions
-    Dummy,
 }
 
 impl Node for Expr {
@@ -68,7 +70,6 @@ impl Node for Expr {
             Self::If(e) => e.token_literal(),
             Self::Fn(e) => e.token_literal(),
             Self::Call(e) => e.token_literal(),
-            Self::Dummy => todo!(),
         }
     }
 }
@@ -84,7 +85,6 @@ impl fmt::Display for Expr {
             Self::If(e) => write!(f, "{}", e),
             Self::Fn(e) => write!(f, "{}", e),
             Self::Call(e) => write!(f, "{}", e),
-            Self::Dummy => todo!(),
         }
     }
 }
