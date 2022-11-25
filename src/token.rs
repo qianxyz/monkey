@@ -1,45 +1,26 @@
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub enum TokenType {
-    Illegal,
-    Eof,
-
-    // identifiers and literals
-    Ident, // foo, bar, ...
-    Int,   // 1, 2, ...
+#[derive(Debug, PartialEq, Eq)]
+#[rustfmt::skip]
+pub enum Token {
+    // Identifiers and int literals
+    Ident(String), Int(String),
 
     // Operators
-    Assign,
-    Plus,
-    Minus,
-    Bang,
-    Asterisk,
-    Slash,
-
-    LT,
-    GT,
-    EQ,
-    NQ,
+    Assign, Plus, Minus, Bang, Asterisk, Slash, LT, GT, EQ, NQ,
 
     // Delimiters
-    Comma,
-    Semicolon,
-
-    LParen,
-    RParen,
-    LBrace,
-    RBrace,
+    Comma, Semicolon, LParen, RParen, LBrace, RBrace,
 
     // keywords
-    Function,
-    Let,
-    True,
-    False,
-    If,
-    Else,
-    Return,
+    Function, Let, True, False, If, Else, Return,
+
+    // End of file
+    Eof,
+
+    // An illegal byte
+    Illegal(u8),
 }
 
-impl TokenType {
+impl Token {
     pub fn lookup_ident(ident: &str) -> Self {
         match ident {
             "fn" => Self::Function,
@@ -49,34 +30,7 @@ impl TokenType {
             "if" => Self::If,
             "else" => Self::Else,
             "return" => Self::Return,
-            _ => Self::Ident,
+            s => Self::Ident(s.to_string()),
         }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Token {
-    ttype: TokenType,
-    literal: String,
-}
-
-impl Token {
-    pub fn new(ttype: TokenType, literal: &str) -> Self {
-        Self {
-            ttype,
-            literal: literal.to_string(),
-        }
-    }
-
-    pub fn ttype(&self) -> &TokenType {
-        &self.ttype
-    }
-
-    pub fn literal(&self) -> &str {
-        &self.literal
-    }
-
-    pub fn is_eof(&self) -> bool {
-        self.ttype == TokenType::Eof
     }
 }

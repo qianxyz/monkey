@@ -1,32 +1,34 @@
 use std::str;
 
-use crate::token::{Token, TokenType};
+use crate::token::Token;
 
 pub struct Lexer {
     /// The input string, stored as a byte array
     input: Vec<u8>,
 
-    /// Current position (points to current char)
+    /// Current position
     position: usize,
 
-    /// Reading position (after current char)
+    /// One after the current position
     read_position: usize,
 
-    /// Current char under examination
+    /// Current char
     ch: u8,
 }
 
 impl Lexer {
-    pub fn new(input: &str) -> Self {
+    pub fn new(input: String) -> Self {
+        // TODO: a nice error notifying the non-ascii chars
         assert!(input.is_ascii());
 
         let mut lexer = Self {
-            input: input.as_bytes().to_vec(),
+            input: input.into_bytes(),
             position: 0,
             read_position: 0,
             ch: 0,
         };
 
+        // set ch to first byte, position to 0, read_position to 1
         lexer.read_char();
 
         lexer
@@ -36,53 +38,59 @@ impl Lexer {
         self.skip_whitespace();
 
         let tok = match self.ch {
+            // single char tokens
+            b';' => Token::Semicolon,
+            b'(' => Token::LParen,
+            b')' => Token::RParen,
+            b'{' => Token::LBrace,
+            b'}' => Token::RBrace,
+            b',' => Token::Comma,
+            b'+' => Token::Plus,
+            b'-' => Token::Minus,
+            b'*' => Token::Asterisk,
+            b'/' => Token::Slash,
+            b'<' => Token::LT,
+            b'>' => Token::GT,
+            0 => Token::Eof,
+
+            // look ahead one char for `==` and `!=`
             b'=' => {
                 if self.peek_char() == b'=' {
                     self.read_char();
-                    Token::new(TokenType::EQ, "==")
+                    Token::EQ
                 } else {
-                    Token::new(TokenType::Assign, "=")
+                    Token::Assign
                 }
             }
             b'!' => {
                 if self.peek_char() == b'=' {
                     self.read_char();
-                    Token::new(TokenType::NQ, "!=")
+                    Token::NQ
                 } else {
-                    Token::new(TokenType::Bang, "!")
+                    Token::Bang
                 }
             }
-            b';' => Token::new(TokenType::Semicolon, ";"),
-            b'(' => Token::new(TokenType::LParen, "("),
-            b')' => Token::new(TokenType::RParen, ")"),
-            b'{' => Token::new(TokenType::LBrace, "{"),
-            b'}' => Token::new(TokenType::RBrace, "}"),
-            b',' => Token::new(TokenType::Comma, ","),
-            b'+' => Token::new(TokenType::Plus, "+"),
-            b'-' => Token::new(TokenType::Minus, "-"),
-            b'*' => Token::new(TokenType::Asterisk, "*"),
-            b'/' => Token::new(TokenType::Slash, "/"),
-            b'<' => Token::new(TokenType::LT, "<"),
-            b'>' => Token::new(TokenType::GT, ">"),
-            0 => Token::new(TokenType::Eof, ""),
 
+            // when we find a letter ...
             c if is_letter(c) => {
+                // ... advance and consume till no more letters
                 let literal = self.read_ident();
-                let ttype = TokenType::lookup_ident(literal);
-                // early return: `read_ident` advances pointers,
-                // ending `read_char` should be avoided
-                return Token::new(ttype, literal);
+
+                // early return to avoid the `read_char` at the end
+                return Token::lookup_ident(literal);
             }
 
+            // when we find a digit ...
             c if is_digit(c) => {
-                let ttype = TokenType::Int;
+                // ... advance and consume till no more digits
                 let literal = self.read_number();
-                // early return: see above
-                return Token::new(ttype, literal);
+
+                // early return to avoid the `read_char` at the end
+                return Token::Int(literal.to_string());
             }
 
-            // default: illegal char
-            c => Token::new(TokenType::Illegal, str::from_utf8(&[c]).unwrap()),
+            // illegal char
+            c => Token::Illegal(c),
         };
 
         self.read_char();
@@ -90,16 +98,19 @@ impl Lexer {
         tok
     }
 
+    /// Advance both pointers, store the current char in `self.ch`.
     fn read_char(&mut self) {
         self.ch = *self.input.get(self.read_position).unwrap_or(&0);
         self.position = self.read_position;
         self.read_position += 1;
     }
 
+    /// Get the next char.
     fn peek_char(&self) -> u8 {
         *self.input.get(self.read_position).unwrap_or(&0)
     }
 
+    /// Read until self.ch is not a letter, return the string covered.
     fn read_ident(&mut self) -> &str {
         let pos = self.position;
         while is_letter(self.ch) {
@@ -109,6 +120,7 @@ impl Lexer {
         str::from_utf8(&self.input[pos..self.position]).unwrap()
     }
 
+    /// Read until self.ch is not a digit, return the string covered.
     fn read_number(&mut self) -> &str {
         let pos = self.position;
         while is_digit(self.ch) {
@@ -118,6 +130,7 @@ impl Lexer {
         str::from_utf8(&self.input[pos..self.position]).unwrap()
     }
 
+    /// Skip until current char is not whitespace.
     fn skip_whitespace(&mut self) {
         while b" \n\t\r".contains(&self.ch) {
             self.read_char();
@@ -136,11 +149,12 @@ fn is_digit(c: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use Token::*;
 
-    fn helper(input: &str, tokens: Vec<(TokenType, &str)>) {
-        let mut lexer = Lexer::new(input);
-        for (ttype, literal) in tokens {
-            assert_eq!(lexer.next_token(), Token::new(ttype, literal));
+    fn helper(input: &str, tokens: Vec<Token>) {
+        let mut lexer = Lexer::new(input.to_string());
+        for t in tokens {
+            assert_eq!(lexer.next_token(), t);
         }
     }
 
@@ -148,17 +162,8 @@ mod tests {
     fn one_char_tokens() {
         let input = "=+(){},;";
 
-        use TokenType::*;
         let tokens = vec![
-            (Assign, "="),
-            (Plus, "+"),
-            (LParen, "("),
-            (RParen, ")"),
-            (LBrace, "{"),
-            (RBrace, "}"),
-            (Comma, ","),
-            (Semicolon, ";"),
-            (Eof, ""),
+            Assign, Plus, LParen, RParen, LBrace, RBrace, Comma, Semicolon, Eof,
         ];
 
         helper(input, tokens);
@@ -177,45 +182,51 @@ let add = fn(x, y) {
 let result = add(five, ten);
 ";
 
-        use TokenType::*;
+        let five = || Ident("five".to_string());
+        let ten = || Ident("ten".to_string());
+        let add = || Ident("add".to_string());
+        let x = || Ident("x".to_string());
+        let y = || Ident("y".to_string());
+        let result = || Ident("result".to_string());
+
         let tokens = vec![
-            (Let, "let"),
-            (Ident, "five"),
-            (Assign, "="),
-            (Int, "5"),
-            (Semicolon, ";"),
-            (Let, "let"),
-            (Ident, "ten"),
-            (Assign, "="),
-            (Int, "10"),
-            (Semicolon, ";"),
-            (Let, "let"),
-            (Ident, "add"),
-            (Assign, "="),
-            (Function, "fn"),
-            (LParen, "("),
-            (Ident, "x"),
-            (Comma, ","),
-            (Ident, "y"),
-            (RParen, ")"),
-            (LBrace, "{"),
-            (Ident, "x"),
-            (Plus, "+"),
-            (Ident, "y"),
-            (Semicolon, ";"),
-            (RBrace, "}"),
-            (Semicolon, ";"),
-            (Let, "let"),
-            (Ident, "result"),
-            (Assign, "="),
-            (Ident, "add"),
-            (LParen, "("),
-            (Ident, "five"),
-            (Comma, ","),
-            (Ident, "ten"),
-            (RParen, ")"),
-            (Semicolon, ";"),
-            (Eof, ""),
+            Let,
+            five(),
+            Assign,
+            Int("5".to_string()),
+            Semicolon,
+            Let,
+            ten(),
+            Assign,
+            Int("10".to_string()),
+            Semicolon,
+            Let,
+            add(),
+            Assign,
+            Function,
+            LParen,
+            x(),
+            Comma,
+            y(),
+            RParen,
+            LBrace,
+            x(),
+            Plus,
+            y(),
+            Semicolon,
+            RBrace,
+            Semicolon,
+            Let,
+            result(),
+            Assign,
+            add(),
+            LParen,
+            five(),
+            Comma,
+            ten(),
+            RParen,
+            Semicolon,
+            Eof,
         ];
 
         helper(input, tokens);
@@ -225,21 +236,20 @@ let result = add(five, ten);
     fn more_tokens() {
         let input = "!-/*5; 5 < 10 > 5;";
 
-        use TokenType::*;
         let tokens = vec![
-            (Bang, "!"),
-            (Minus, "-"),
-            (Slash, "/"),
-            (Asterisk, "*"),
-            (Int, "5"),
-            (Semicolon, ";"),
-            (Int, "5"),
-            (LT, "<"),
-            (Int, "10"),
-            (GT, ">"),
-            (Int, "5"),
-            (Semicolon, ";"),
-            (Eof, ""),
+            Bang,
+            Minus,
+            Slash,
+            Asterisk,
+            Int("5".to_string()),
+            Semicolon,
+            Int("5".to_string()),
+            LT,
+            Int("10".to_string()),
+            GT,
+            Int("5".to_string()),
+            Semicolon,
+            Eof,
         ];
 
         helper(input, tokens);
@@ -255,26 +265,25 @@ if (5 < 10) {
 }
 ";
 
-        use TokenType::*;
         let tokens = vec![
-            (If, "if"),
-            (LParen, "("),
-            (Int, "5"),
-            (LT, "<"),
-            (Int, "10"),
-            (RParen, ")"),
-            (LBrace, "{"),
-            (Return, "return"),
-            (True, "true"),
-            (Semicolon, ";"),
-            (RBrace, "}"),
-            (Else, "else"),
-            (LBrace, "{"),
-            (Return, "return"),
-            (False, "false"),
-            (Semicolon, ";"),
-            (RBrace, "}"),
-            (Eof, ""),
+            If,
+            LParen,
+            Int("5".to_string()),
+            LT,
+            Int("10".to_string()),
+            RParen,
+            LBrace,
+            Return,
+            True,
+            Semicolon,
+            RBrace,
+            Else,
+            LBrace,
+            Return,
+            False,
+            Semicolon,
+            RBrace,
+            Eof,
         ];
 
         helper(input, tokens);
@@ -287,17 +296,16 @@ if (5 < 10) {
 10 != 9;
 ";
 
-        use TokenType::*;
         let tokens = vec![
-            (Int, "10"),
-            (EQ, "=="),
-            (Int, "10"),
-            (Semicolon, ";"),
-            (Int, "10"),
-            (NQ, "!="),
-            (Int, "9"),
-            (Semicolon, ";"),
-            (Eof, ""),
+            Int("10".to_string()),
+            EQ,
+            Int("10".to_string()),
+            Semicolon,
+            Int("10".to_string()),
+            NQ,
+            Int("9".to_string()),
+            Semicolon,
+            Eof,
         ];
 
         helper(input, tokens);
