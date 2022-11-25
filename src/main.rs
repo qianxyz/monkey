@@ -1,6 +1,6 @@
-//mod ast;
+mod ast;
 mod lexer;
-//mod parser;
+mod parser;
 mod repl;
 mod token;
 
