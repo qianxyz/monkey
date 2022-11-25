@@ -147,30 +147,29 @@ impl Parser {
             return None;
         }
 
-        // TODO: we skip parsing the expression for now
-        while !self.cur_token_is(TokenType::Semicolon) {
+        self.next_token();
+        let value = self.parse_expr(Precedence::Lowest)?;
+
+        if self.peek_token_is(TokenType::Semicolon) {
             self.next_token();
         }
 
-        Some(LetStmt {
-            token,
-            name,
-            value: Expr::Dummy,
-        })
+        Some(LetStmt { token, name, value })
     }
 
     fn parse_return_stmt(&mut self) -> Option<ReturnStmt> {
         let token = self.cur.clone(); // the `Return` token
         self.next_token();
 
-        // TODO: we skip parsing the expression for now
-        while !self.cur_token_is(TokenType::Semicolon) {
+        let return_value = self.parse_expr(Precedence::Lowest)?;
+
+        if self.peek_token_is(TokenType::Semicolon) {
             self.next_token();
         }
 
         Some(ReturnStmt {
             token,
-            return_value: Expr::Dummy,
+            return_value,
         })
     }
 
