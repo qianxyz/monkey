@@ -27,6 +27,7 @@ impl From<&TokenType> for Precedence {
             LT | GT => Self::LessGreater,
             Plus | Minus => Self::Sum,
             Asterisk | Slash => Self::Product,
+            LParen => Self::Call,
             _ => Self::Lowest,
         }
     }
@@ -84,6 +85,8 @@ impl Parser {
         ret.register_infix(TokenType::GT, Self::parse_infix_expr);
         ret.register_infix(TokenType::EQ, Self::parse_infix_expr);
         ret.register_infix(TokenType::NQ, Self::parse_infix_expr);
+
+        ret.register_infix(TokenType::LParen, Self::parse_call_expr);
 
         ret
     }
@@ -390,6 +393,40 @@ impl Parser {
         Some(idents)
     }
 
+    fn parse_call_expr(&mut self, func: Expr) -> Option<Expr> {
+        let token = self.cur.clone();
+        let args = self.parse_call_args()?;
+
+        Some(Expr::Call(CallExpr {
+            token,
+            func: func.into(),
+            args,
+        }))
+    }
+
+    fn parse_call_args(&mut self) -> Option<Vec<Expr>> {
+        let mut args = Vec::new();
+
+        if self.peek_token_is(TokenType::RParen) {
+            self.next_token();
+            return Some(args);
+        }
+
+        self.next_token();
+        args.push(self.parse_expr(Precedence::Lowest)?);
+        while self.peek_token_is(TokenType::Comma) {
+            self.next_token();
+            self.next_token();
+            args.push(self.parse_expr(Precedence::Lowest)?);
+        }
+
+        if !self.expect_peek(TokenType::RParen) {
+            return None;
+        }
+
+        Some(args)
+    }
+
     fn cur_token_is(&self, t: TokenType) -> bool {
         self.cur.ttype() == &t
     }
@@ -482,7 +519,7 @@ let foobar = 838383;
             )
         }
 
-        assert_eq!(errors.first(), None);
+        assert_eq!(errors, vec![]);
         assert_eq!(stmts.len(), 3);
     }
 
@@ -535,7 +572,7 @@ return 993322;
             )
         }
 
-        assert_eq!(errors.first(), None);
+        assert_eq!(errors, vec![]);
         assert_eq!(stmts.len(), 3);
     }
 
@@ -555,7 +592,7 @@ return 993322;
             })
         );
 
-        assert_eq!(errors.first(), None);
+        assert_eq!(errors, vec![]);
         assert_eq!(stmts.len(), 1);
     }
 
@@ -575,7 +612,7 @@ return 993322;
             })
         );
 
-        assert_eq!(errors.first(), None);
+        assert_eq!(errors, vec![]);
         assert_eq!(stmts.len(), 1);
     }
 
@@ -596,7 +633,7 @@ return 993322;
 
         for (input, ttype, op, val) in inputs {
             let (stmts, errors) = parser_helper(input);
-            assert_eq!(errors.first(), None);
+            assert_eq!(errors, vec![]);
             assert_eq!(stmts.len(), 1);
             assert_eq!(
                 stmts[0],
@@ -632,7 +669,7 @@ return 993322;
 
         for (input, ttype, op) in inputs {
             let (stmts, errors) = parser_helper(input);
-            assert_eq!(errors.first(), None);
+            assert_eq!(errors, vec![]);
             assert_eq!(
                 stmts[0],
                 Stmt::Expr(ExprStmt {
@@ -681,6 +718,15 @@ return 993322;
             ("2 / (5 + 5)", "(2 / (5 + 5))"),
             ("-(5 + 5)", "(-(5 + 5))"),
             ("!(true == true)", "(!(true == true))"),
+            ("a + add(b * c) + d", "((a + add((b * c))) + d)"),
+            (
+                "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+                "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+            ),
+            (
+                "add(a + b + c * d / f + g)",
+                "add((((a + b) + ((c * d) / f)) + g))",
+            ),
         ];
 
         for (input, expect) in cases {
@@ -700,7 +746,7 @@ return 993322;
 
         for (input, ttype, b) in inputs {
             let (stmts, errors) = parser_helper(input);
-            assert_eq!(errors.first(), None);
+            assert_eq!(errors, vec![]);
             assert_eq!(stmts.len(), 1);
             assert_eq!(
                 stmts[0],
@@ -755,7 +801,7 @@ return 993322;
                 })
             })
         );
-        assert_eq!(errors.first(), None);
+        assert_eq!(errors, vec![]);
         assert_eq!(stmts.len(), 1);
     }
 
@@ -808,7 +854,7 @@ return 993322;
                 })
             })
         );
-        assert_eq!(errors.first(), None);
+        assert_eq!(errors, vec![]);
         assert_eq!(stmts.len(), 1);
     }
 
@@ -889,5 +935,60 @@ return 993322;
                 })
             );
         }
+    }
+
+    #[test]
+    fn call_expr() {
+        let input = "add(1, 2 + 3, 4 * 5)";
+        let (stmts, errors) = parser_helper(input);
+        assert_eq!(errors, vec![]);
+        assert_eq!(
+            stmts[0],
+            Stmt::Expr(ExprStmt {
+                token: Token::new(TokenType::Ident, "add"),
+                expr: Expr::Call(CallExpr {
+                    token: Token::new(TokenType::LParen, "("),
+                    func: Expr::Ident(Identifier {
+                        token: Token::new(TokenType::Ident, "add"),
+                        value: "add".to_string()
+                    })
+                    .into(),
+                    args: vec![
+                        Expr::Int(IntLiteral {
+                            token: Token::new(TokenType::Int, "1"),
+                            value: 1
+                        }),
+                        Expr::Infix(InfixExpr {
+                            token: Token::new(TokenType::Plus, "+"),
+                            left: Expr::Int(IntLiteral {
+                                token: Token::new(TokenType::Int, "2"),
+                                value: 2
+                            })
+                            .into(),
+                            op: "+".to_string(),
+                            right: Expr::Int(IntLiteral {
+                                token: Token::new(TokenType::Int, "3"),
+                                value: 3
+                            })
+                            .into(),
+                        }),
+                        Expr::Infix(InfixExpr {
+                            token: Token::new(TokenType::Asterisk, "*"),
+                            left: Expr::Int(IntLiteral {
+                                token: Token::new(TokenType::Int, "4"),
+                                value: 4
+                            })
+                            .into(),
+                            op: "*".to_string(),
+                            right: Expr::Int(IntLiteral {
+                                token: Token::new(TokenType::Int, "5"),
+                                value: 5
+                            })
+                            .into(),
+                        }),
+                    ]
+                })
+            })
+        )
     }
 }

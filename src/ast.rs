@@ -52,6 +52,7 @@ pub enum Expr {
     Bool(Boolean),
     If(IfExpr),
     Fn(FuncLiteral),
+    Call(CallExpr),
     // TODO: this is a placeholder variant before we can parse valid expressions
     Dummy,
 }
@@ -66,6 +67,7 @@ impl Node for Expr {
             Self::Bool(e) => e.token_literal(),
             Self::If(e) => e.token_literal(),
             Self::Fn(e) => e.token_literal(),
+            Self::Call(e) => e.token_literal(),
             Self::Dummy => todo!(),
         }
     }
@@ -81,6 +83,7 @@ impl fmt::Display for Expr {
             Self::Bool(e) => write!(f, "{}", e),
             Self::If(e) => write!(f, "{}", e),
             Self::Fn(e) => write!(f, "{}", e),
+            Self::Call(e) => write!(f, "{}", e),
             Self::Dummy => todo!(),
         }
     }
@@ -398,6 +401,41 @@ impl fmt::Display for FuncLiteral {
                 .collect::<Vec<_>>()
                 .join(", "),
             self.body
+        )
+    }
+}
+
+/// A function call, like `add(2, 3)`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct CallExpr {
+    /// The `(` token
+    pub token: Token,
+
+    /// An Identifier or a FuncLiteral: `add(2, 3)` or
+    /// `fn(x, y) { x + y; }(2, 3)`
+    pub func: Box<Expr>,
+
+    /// The arguments
+    pub args: Vec<Expr>,
+}
+
+impl Node for CallExpr {
+    fn token_literal(&self) -> &str {
+        self.token.literal()
+    }
+}
+
+impl fmt::Display for CallExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}({})",
+            self.func,
+            self.args
+                .iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         )
     }
 }
