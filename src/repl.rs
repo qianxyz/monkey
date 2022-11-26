@@ -15,7 +15,7 @@ pub fn run() {
 
         let Some(Ok(input)) = it.next() else { break };
 
-        let lexer = Lexer::new(&input);
+        let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program();
         let errors = parser.errors();
@@ -27,8 +27,6 @@ pub fn run() {
             continue;
         }
 
-        for s in program.stmts {
-            println!("{:?}", s);
-        }
+        print!("{}", program);
     }
 }
