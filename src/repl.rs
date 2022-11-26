@@ -1,7 +1,7 @@
 use std::io::{self, BufRead, Write};
 
 use crate::lexer::Lexer;
-use crate::token::Token;
+use crate::parser::Parser;
 
 const PROMPT: &str = "> ";
 
@@ -15,14 +15,18 @@ pub fn run() {
 
         let Some(Ok(input)) = it.next() else { break };
 
-        let mut lexer = Lexer::new(input);
+        let lexer = Lexer::new(input);
+        let mut parser = Parser::new(lexer);
+        let program = parser.parse_program();
+        let errors = parser.errors();
 
-        loop {
-            let token = lexer.next_token();
-            println!("{:?}", token);
-            if token == Token::Eof {
-                break;
+        if !errors.is_empty() {
+            for e in errors {
+                println!("\t{:?}", e);
             }
+            continue;
         }
+
+        print!("{}", program);
     }
 }

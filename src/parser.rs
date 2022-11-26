@@ -57,6 +57,10 @@ impl Parser {
         }
     }
 
+    pub fn errors(&self) -> &[ParseError] {
+        &self.errors
+    }
+
     /// Advance the parse point, return the current token.
     fn next_token(&mut self) -> Token {
         mem::replace(
