@@ -243,6 +243,13 @@ pub enum ParseError {
 mod tests {
     use super::*;
 
+    fn parse_helper(input: &str) -> Vec<Stmt> {
+        let mut parser = Parser::new(Lexer::new(input.to_string()));
+        let prog = parser.parse_program();
+        assert_eq!(parser.errors, vec![]);
+        prog.0
+    }
+
     #[test]
     fn let_stmt() {
         let input = "\
@@ -252,11 +259,8 @@ let foobar = 838383;
 ";
         let expect = [("x", 5), ("y", 10), ("foobar", 838383)];
 
-        let mut parser = Parser::new(Lexer::new(input.to_string()));
-        let prog = parser.parse_program();
-        assert_eq!(parser.errors, vec![]);
-
-        for (s, (x, n)) in prog.0.into_iter().zip(expect.into_iter()) {
+        let stmts = parse_helper(input);
+        for (s, (x, n)) in stmts.into_iter().zip(expect.into_iter()) {
             assert_eq!(s, Stmt::Let(Ident(x.to_string()), Expr::Int(n)));
         }
     }
@@ -270,11 +274,8 @@ return 993322;
 ";
         let expect = [5, 10, 993322];
 
-        let mut parser = Parser::new(Lexer::new(input.to_string()));
-        let prog = parser.parse_program();
-        assert_eq!(parser.errors, vec![]);
-
-        for (s, n) in prog.0.into_iter().zip(expect.into_iter()) {
+        let stmts = parse_helper(input);
+        for (s, n) in stmts.into_iter().zip(expect.into_iter()) {
             assert_eq!(s, Stmt::Ret(Expr::Int(n)))
         }
     }
@@ -284,11 +285,8 @@ return 993322;
         let input = "x; y;";
         let expect = ["x", "y"];
 
-        let mut parser = Parser::new(Lexer::new(input.to_string()));
-        let prog = parser.parse_program();
-        assert_eq!(parser.errors, vec![]);
-
-        for (s, x) in prog.0.into_iter().zip(expect.iter()) {
+        let stmts = parse_helper(input);
+        for (s, x) in stmts.into_iter().zip(expect.iter()) {
             assert_eq!(s, Stmt::Expr(Expr::Ident(Ident(x.to_string()))));
         }
     }
@@ -298,11 +296,9 @@ return 993322;
         let cases = [("!5;", Token::Bang, 5), ("-15;", Token::Minus, 15)];
 
         for (input, op, n) in cases {
-            let mut parser = Parser::new(Lexer::new(input.to_string()));
-            let prog = parser.parse_program();
-            assert_eq!(parser.errors, vec![]);
+            let stmts = parse_helper(input);
             assert_eq!(
-                prog.0[0],
+                stmts[0],
                 Stmt::Expr(Expr::Prefix {
                     op,
                     right: Expr::Int(n).into()
@@ -327,11 +323,9 @@ return 993322;
         let five = || Box::new(Expr::Int(5));
 
         for (input, op) in cases {
-            let mut parser = Parser::new(Lexer::new(input.to_string()));
-            let prog = parser.parse_program();
-            assert_eq!(parser.errors, vec![]);
+            let stmts = parse_helper(input);
             assert_eq!(
-                prog.0[0],
+                stmts[0],
                 Stmt::Expr(Expr::Infix {
                     op,
                     left: five(),
@@ -394,10 +388,8 @@ return 993322;
         let cases = [("true;", true), ("false", false)];
 
         for (input, b) in cases {
-            let mut parser = Parser::new(Lexer::new(input.to_string()));
-            let program = parser.parse_program();
-            assert_eq!(parser.errors, vec![]);
-            assert_eq!(program.0[0], Stmt::Expr(Expr::Bool(b)))
+            let stmts = parse_helper(input);
+            assert_eq!(stmts[0], Stmt::Expr(Expr::Bool(b)))
         }
     }
 
@@ -409,12 +401,10 @@ if (x < y) { x; } else { y; }";
         let x = || Expr::Ident(Ident("x".to_string()));
         let y = || Expr::Ident(Ident("y".to_string()));
 
-        let mut parser = Parser::new(Lexer::new(input.to_string()));
-        let program = parser.parse_program();
-        assert_eq!(parser.errors, vec![]);
+        let stmts = parse_helper(input);
         for i in 0..2 {
             assert_eq!(
-                program.0[i],
+                stmts[i],
                 Stmt::Expr(Expr::If {
                     cond: Expr::Infix {
                         op: Token::LT,
@@ -439,11 +429,9 @@ if (x < y) { x; } else { y; }";
         let x = || Ident("x".to_string());
         let y = || Ident("y".to_string());
 
-        let mut parser = Parser::new(Lexer::new(input.to_string()));
-        let program = parser.parse_program();
-        assert_eq!(parser.errors, vec![]);
+        let stmts = parse_helper(input);
         assert_eq!(
-            program.0[0],
+            stmts[0],
             Stmt::Expr(Expr::Fn {
                 params: vec![x(), y()],
                 body: Block(vec![Stmt::Expr(Expr::Infix {
@@ -464,11 +452,9 @@ if (x < y) { x; } else { y; }";
         ];
 
         for (input, params) in cases {
-            let mut parser = Parser::new(Lexer::new(input.to_string()));
-            let prog = parser.parse_program();
-            assert_eq!(parser.errors, vec![]);
+            let stmts = parse_helper(input);
             assert_eq!(
-                prog.0[0],
+                stmts[0],
                 Stmt::Expr(Expr::Fn {
                     params: params.iter().map(|s| Ident(s.to_string())).collect(),
                     body: Block(vec![])
@@ -480,11 +466,10 @@ if (x < y) { x; } else { y; }";
     #[test]
     fn call_expr() {
         let input = "add(1, 2 + 3, 4 * 5)";
-        let mut parser = Parser::new(Lexer::new(input.to_string()));
-        let prog = parser.parse_program();
-        assert_eq!(parser.errors, vec![]);
+
+        let stmts = parse_helper(input);
         assert_eq!(
-            prog.0[0],
+            stmts[0],
             Stmt::Expr(Expr::Call {
                 func: Expr::Ident(Ident("add".to_string())).into(),
                 args: vec![
