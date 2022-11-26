@@ -4,35 +4,6 @@ use crate::ast::{Block, Expr, Ident, Program, Stmt};
 use crate::lexer::Lexer;
 use crate::token::Token;
 
-type PrefixParseFn = fn(&mut Parser) -> Option<Expr>;
-type InfixParseFn = fn(&mut Parser, Expr) -> Option<Expr>;
-
-impl TryFrom<&Token> for PrefixParseFn {
-    type Error = ParseError;
-
-    fn try_from(value: &Token) -> Result<Self, Self::Error> {
-        use Token::*;
-        match value {
-            Ident(_) => Ok(Parser::parse_ident),
-            Int(_) => Ok(Parser::parse_int),
-            Minus | Bang => Ok(Parser::parse_prefix),
-            _ => Err(ParseError),
-        }
-    }
-}
-
-impl TryFrom<&Token> for InfixParseFn {
-    type Error = ParseError;
-
-    fn try_from(value: &Token) -> Result<Self, Self::Error> {
-        use Token::*;
-        match value {
-            Plus | Minus | Slash | Asterisk | EQ | NQ | LT | GT => Ok(Parser::parse_infix),
-            _ => Err(ParseError),
-        }
-    }
-}
-
 #[derive(PartialEq, PartialOrd)]
 enum Precedence {
     Lowest,
@@ -98,17 +69,16 @@ impl Parser {
         let mut stmts = Vec::new();
 
         while self.curr != Token::Eof {
-            if let Some(stmt) = self.parse_stmt() {
-                stmts.push(stmt);
-            } else {
-                self.next_token();
+            match self.parse_stmt() {
+                Ok(s) => stmts.push(s),
+                Err(e) => self.errors.push(e),
             }
         }
 
         Program(stmts)
     }
 
-    fn parse_stmt(&mut self) -> Option<Stmt> {
+    fn parse_stmt(&mut self) -> ParseResult<Stmt> {
         match self.curr {
             Token::Let => self.parse_let_stmt(),
             Token::Return => self.parse_ret_stmt(),
@@ -116,23 +86,14 @@ impl Parser {
         }
     }
 
-    fn parse_let_stmt(&mut self) -> Option<Stmt> {
-        // `let` must be followed by an identifier
-        let Token::Ident(_) = self.peek else {
-            self.errors.push(ParseError);
-            return None;
-        };
+    fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
         self.next_token(); // skip the `let` token
 
-        // the identifier must be followed by a `=`
-        if self.peek != Token::Assign {
-            self.errors.push(ParseError);
-            return None;
-        }
+        // `let` must be followed by an identifier
+        let ident = self.assert_curr_is_ident()?;
 
-        let Token::Ident(s) = self.next_token() else { unreachable!() };
-        let ident = Ident(s);
-        self.next_token();
+        // the identifier must be followed by a `=`
+        self.assert_curr(Token::Assign)?;
 
         let value = self.parse_expr(Precedence::Lowest)?;
 
@@ -141,10 +102,10 @@ impl Parser {
             self.next_token();
         }
 
-        Some(Stmt::Let(ident, value))
+        Ok(Stmt::Let(ident, value))
     }
 
-    fn parse_ret_stmt(&mut self) -> Option<Stmt> {
+    fn parse_ret_stmt(&mut self) -> ParseResult<Stmt> {
         self.next_token(); // skip the `return` token
 
         let return_value = self.parse_expr(Precedence::Lowest)?;
@@ -154,10 +115,10 @@ impl Parser {
             self.next_token();
         }
 
-        Some(Stmt::Ret(return_value))
+        Ok(Stmt::Ret(return_value))
     }
 
-    fn parse_expr_stmt(&mut self) -> Option<Stmt> {
+    fn parse_expr_stmt(&mut self) -> ParseResult<Stmt> {
         let expr = self.parse_expr(Precedence::Lowest)?;
 
         // skip the optional semicolon
@@ -165,79 +126,89 @@ impl Parser {
             self.next_token();
         }
 
-        Some(Stmt::Expr(expr))
+        Ok(Stmt::Expr(expr))
     }
 
-    fn parse_expr(&mut self, precedence: Precedence) -> Option<Expr> {
-        let prefix_fn = match PrefixParseFn::try_from(&self.curr) {
-            Ok(f) => f,
-            Err(e) => {
-                self.errors.push(e);
-                return None;
-            }
-        };
-        let mut left = prefix_fn(self)?;
+    fn parse_expr(&mut self, precedence: Precedence) -> ParseResult<Expr> {
+        use Token::*;
+        let mut left = match self.curr {
+            Ident(_) => self.parse_ident(),
+            Int(_) => self.parse_int(),
+            Minus | Bang => self.parse_prefix(),
+            _ => return Err(ParseError::NoPrefixParseFn(self.next_token())),
+        }?;
 
         while precedence < Precedence::from(&self.curr) {
-            let infix_fn = match InfixParseFn::try_from(&self.curr) {
-                Ok(f) => f,
-                Err(_) => {
-                    // TODO: it is always an error?
-                    return Some(left);
-                }
+            left = match self.curr {
+                Plus | Minus | Slash | Asterisk | EQ | NQ | LT | GT => self.parse_infix(left)?,
+                _ => return Err(ParseError::NoInfixParseFn(self.next_token())),
             };
-            left = infix_fn(self, left)?;
         }
 
-        Some(left)
+        Ok(left)
     }
 
-    fn parse_ident(&mut self) -> Option<Expr> {
+    fn parse_ident(&mut self) -> ParseResult<Expr> {
         let Token::Ident(s) = self.next_token() else { unreachable!() };
-        Some(Expr::Ident(Ident(s)))
+        Ok(Expr::Ident(Ident(s)))
     }
 
-    fn parse_int(&mut self) -> Option<Expr> {
+    fn parse_int(&mut self) -> ParseResult<Expr> {
         let Token::Int(s) = self.next_token() else { unreachable!() };
         match s.parse() {
-            Ok(n) => Some(Expr::Int(n)),
-            _ => {
-                self.errors.push(ParseError);
-                None
-            }
+            Ok(n) => Ok(Expr::Int(n)),
+            _ => Err(ParseError::ParseIntError(s)),
         }
     }
 
-    fn parse_prefix(&mut self) -> Option<Expr> {
+    fn parse_prefix(&mut self) -> ParseResult<Expr> {
         let op = self.next_token();
         let right = Box::new(self.parse_expr(Precedence::Prefix)?);
 
-        Some(Expr::Prefix { op, right })
+        Ok(Expr::Prefix { op, right })
     }
 
-    fn parse_infix(&mut self, left: Expr) -> Option<Expr> {
+    fn parse_infix(&mut self, left: Expr) -> ParseResult<Expr> {
         let prec = Precedence::from(&self.curr);
         let op = self.next_token();
         let right = Box::new(self.parse_expr(prec)?);
 
-        Some(Expr::Infix {
+        Ok(Expr::Infix {
             op,
             left: left.into(),
             right,
         })
     }
+
+    /// Check if the current token is expected.
+    /// This advances the parse point anyway.
+    fn assert_curr(&mut self, expected: Token) -> ParseResult<Token> {
+        match self.next_token() {
+            t if t == expected => Ok(t),
+            t => Err(ParseError::UnexpectedToken { expected, got: t }),
+        }
+    }
+
+    /// Check if the current token is an identifier.
+    /// This advances the parse point anyway.
+    fn assert_curr_is_ident(&mut self) -> ParseResult<Ident> {
+        match self.next_token() {
+            Token::Ident(s) => Ok(Ident(s)),
+            t => Err(ParseError::NotAnIdentifier(t)),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ParseError;
-/*
 pub enum ParseError {
     UnexpectedToken { expected: Token, got: Token },
+    NotAnIdentifier(Token),
     ParseIntError(String),
     NoPrefixParseFn(Token),
     NoInfixParseFn(Token),
 }
-*/
+
+pub type ParseResult<T> = Result<T, ParseError>;
 
 #[cfg(test)]
 mod tests {
@@ -491,12 +462,6 @@ if (x < y) { x; } else { y; }";
 }
 
 /*
-    // ? Most of the parsing functions return Option<ast::Stmt>, which is None
-    // when we encounter a parsing error. The error itself, however,
-    // is not returned directly, and instead is handled by each function.
-    // This grants more flexibility, e.g., raising multiple errors
-    // in one parsing function; If such need never rises at the end,
-    // maybe it's better to be explicit by returning Result<Stmt, ParseError>.
 
     fn parse_boolean(&mut self) -> Option<Expr> {
         Some(Expr::Bool(Boolean {
@@ -666,48 +631,4 @@ if (x < y) { x; } else { y; }";
         Some(args)
     }
 
-    fn cur_token_is(&self, t: TokenType) -> bool {
-        self.cur.ttype() == &t
-    }
-
-    fn peek_token_is(&self, t: TokenType) -> bool {
-        self.peek.ttype() == &t
-    }
-
-    /// An "assertion function".
-    /// If the next token is of expected type, advance parse point;
-    /// Otherwise, report a ParseError.
-    fn expect_peek(&mut self, t: TokenType) -> bool {
-        if self.peek_token_is(t) {
-            self.next_token();
-            true
-        } else {
-            self.peek_error(t);
-            false
-        }
-    }
-
-    /// Append to errors if the next token is not expected.
-    fn peek_error(&mut self, t: TokenType) {
-        let e = ParseError::UnexpectedToken {
-            expected: t,
-            got: *self.peek.ttype(),
-        };
-        self.errors.push(e);
-    }
-
-    /// This happens when parser is to parse an expression, but found
-    /// a token that is not supposed to be a prefix.
-    fn no_prefix_parse_fn_error(&mut self, t: TokenType) {
-        self.errors.push(ParseError::NoPrefixParseFn(t))
-    }
-
-    fn cur_precedence(&self) -> Precedence {
-        self.cur.ttype().into()
-    }
-
-    fn peek_precedence(&self) -> Precedence {
-        self.peek.ttype().into()
-    }
-}
 */
