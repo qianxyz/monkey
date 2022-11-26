@@ -107,7 +107,29 @@ impl fmt::Display for Expr {
             Self::Bool(b) => write!(f, "{}", b),
             Self::Prefix { op, right } => write!(f, "({}{})", op, right),
             Self::Infix { op, left, right } => write!(f, "({} {} {})", left, op, right),
-            _ => todo!(),
+            Self::If { cond, consq, alter } => match alter {
+                None => write!(f, "if ({}) {}", cond, consq),
+                Some(a) => write!(f, "if ({}) {} else {}", cond, consq, a),
+            },
+            Self::Fn { params, body } => write!(
+                f,
+                "fn({}) {}",
+                params
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                body
+            ),
+            Self::Call { func, args } => write!(
+                f,
+                "{}({})",
+                func,
+                args.iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         }
     }
 }

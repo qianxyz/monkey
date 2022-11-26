@@ -135,12 +135,17 @@ impl Parser {
             Ident(_) => self.parse_ident(),
             Int(_) => self.parse_int(),
             Minus | Bang => self.parse_prefix(),
+            True | False => self.parse_boolean(),
+            LParen => self.parse_grouped_expr(),
+            If => self.parse_if_expr(),
+            Function => self.parse_func_literal(),
             _ => return Err(ParseError::NoPrefixParseFn(self.next_token())),
         }?;
 
         while precedence < Precedence::from(&self.curr) {
             left = match self.curr {
                 Plus | Minus | Slash | Asterisk | EQ | NQ | LT | GT => self.parse_infix(left)?,
+                LParen => self.parse_call_expr(left)?,
                 _ => return Err(ParseError::NoInfixParseFn(self.next_token())),
             };
         }
@@ -178,6 +183,123 @@ impl Parser {
             left: left.into(),
             right,
         })
+    }
+
+    fn parse_boolean(&mut self) -> ParseResult<Expr> {
+        match self.next_token() {
+            Token::True => Ok(Expr::Bool(true)),
+            Token::False => Ok(Expr::Bool(false)),
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_grouped_expr(&mut self) -> ParseResult<Expr> {
+        self.next_token(); // the `(`
+        let expr = self.parse_expr(Precedence::Lowest)?;
+
+        // assert the closing `)`
+        self.assert_curr(Token::RParen).map(|_| expr)
+    }
+
+    fn parse_if_expr(&mut self) -> ParseResult<Expr> {
+        self.next_token(); // the `if` token
+
+        // the condition is wrapped in `()`
+        self.assert_curr(Token::LParen)?;
+        let cond = self.parse_expr(Precedence::Lowest)?;
+        self.assert_curr(Token::RParen)?;
+
+        let consq = self.parse_block_stmt()?;
+
+        let alter = if self.curr == Token::Else {
+            self.next_token(); // skip the `else`
+            Some(self.parse_block_stmt()?)
+        } else {
+            None
+        };
+
+        Ok(Expr::If {
+            cond: cond.into(),
+            consq,
+            alter,
+        })
+    }
+
+    fn parse_block_stmt(&mut self) -> ParseResult<Block> {
+        let mut stmts = Vec::new();
+
+        self.assert_curr(Token::LBrace)?;
+
+        while self.curr != Token::RBrace && self.curr != Token::Eof {
+            stmts.push(self.parse_stmt()?);
+        }
+        self.next_token(); // skip the `{`
+
+        Ok(Block(stmts))
+    }
+
+    fn parse_func_literal(&mut self) -> ParseResult<Expr> {
+        self.next_token(); // the `fn`
+
+        let params = self.parse_func_params()?;
+
+        let body = self.parse_block_stmt()?;
+
+        Ok(Expr::Fn { params, body })
+    }
+
+    fn parse_func_params(&mut self) -> ParseResult<Vec<Ident>> {
+        let mut idents = Vec::new();
+
+        self.assert_curr(Token::LParen)?;
+
+        // no parameters
+        if self.curr == Token::RParen {
+            self.next_token();
+            return Ok(idents);
+        }
+
+        // get the first identifier
+        idents.push(self.assert_curr_is_ident()?);
+
+        while self.curr == Token::Comma {
+            self.next_token();
+            idents.push(self.assert_curr_is_ident()?);
+        }
+
+        self.assert_curr(Token::RParen)?;
+
+        Ok(idents)
+    }
+
+    fn parse_call_expr(&mut self, func: Expr) -> ParseResult<Expr> {
+        let args = self.parse_call_args()?;
+
+        Ok(Expr::Call {
+            func: func.into(),
+            args,
+        })
+    }
+
+    fn parse_call_args(&mut self) -> ParseResult<Vec<Expr>> {
+        self.next_token(); // skip the `(`
+
+        let mut args = Vec::new();
+
+        if self.curr == Token::RParen {
+            self.next_token();
+            return Ok(args);
+        }
+
+        args.push(self.parse_expr(Precedence::Lowest)?);
+        while self.curr == Token::Comma {
+            self.next_token();
+            args.push(self.parse_expr(Precedence::Lowest)?);
+        }
+
+        self.assert_curr(Token::RParen)?;
+
+        Ok(args)
     }
 
     /// Check if the current token is expected.
@@ -350,6 +472,7 @@ return 993322;
         for (input, expect) in cases {
             let mut parser = Parser::new(Lexer::new(input.to_string()));
             let program = parser.parse_program();
+            //assert_eq!(parser.errors, vec![]);
             assert_eq!(program.to_string(), expect);
         }
     }
@@ -460,175 +583,3 @@ if (x < y) { x; } else { y; }";
         )
     }
 }
-
-/*
-
-    fn parse_boolean(&mut self) -> Option<Expr> {
-        Some(Expr::Bool(Boolean {
-            token: self.cur.clone(),
-            value: self.cur_token_is(TokenType::True),
-        }))
-    }
-
-    fn parse_grouped_expr(&mut self) -> Option<Expr> {
-        self.next_token();
-        let expr = self.parse_expr(Precedence::Lowest);
-
-        // this will properly register an error
-        if !self.expect_peek(TokenType::RParen) {
-            return None;
-        }
-
-        expr
-    }
-
-    fn parse_if_expr(&mut self) -> Option<Expr> {
-        let cur = self.cur.clone();
-
-        // `if` must be followed by a `(` ...
-        if !self.expect_peek(TokenType::LParen) {
-            return None;
-        }
-
-        self.next_token();
-        let condition = self.parse_expr(Precedence::Lowest)?;
-
-        // ... then closed by a `)`
-        if !self.expect_peek(TokenType::RParen) {
-            return None;
-        }
-
-        // the consequence must be enclosed in curly braces
-        if !self.expect_peek(TokenType::LBrace) {
-            return None;
-        }
-
-        // this handles the closing curly brace
-        let consequence = self.parse_block_stmt()?;
-
-        let alternative = if self.peek_token_is(TokenType::Else) {
-            self.next_token();
-            if !self.expect_peek(TokenType::LBrace) {
-                return None;
-            }
-            Some(self.parse_block_stmt())?
-        } else {
-            None
-        };
-
-        Some(Expr::If(IfExpr {
-            token: cur,
-            condition: condition.into(),
-            consequence,
-            alternative,
-        }))
-    }
-
-    fn parse_block_stmt(&mut self) -> Option<BlockStmt> {
-        let cur = self.cur.clone();
-        let mut stmts = Vec::new();
-
-        self.next_token();
-
-        while !self.cur_token_is(TokenType::RBrace) && !self.cur.is_eof() {
-            stmts.push(self.parse_stmt()?);
-            self.next_token();
-        }
-
-        Some(BlockStmt { token: cur, stmts })
-    }
-
-    fn parse_func_literal(&mut self) -> Option<Expr> {
-        let token = self.cur.clone();
-
-        if !self.expect_peek(TokenType::LParen) {
-            return None;
-        }
-
-        // this takes care of `)`
-        let params = self.parse_func_params()?;
-
-        if !self.expect_peek(TokenType::LBrace) {
-            return None;
-        }
-
-        let body = self.parse_block_stmt()?;
-
-        Some(Expr::Fn(FuncLiteral {
-            token,
-            params,
-            body,
-        }))
-    }
-
-    fn parse_func_params(&mut self) -> Option<Vec<Identifier>> {
-        let mut idents = Vec::new();
-
-        // no parameters
-        if self.peek_token_is(TokenType::RParen) {
-            self.next_token();
-            return Some(idents);
-        }
-
-        // get the first parameter
-        self.next_token();
-        let ident = Identifier {
-            token: self.cur.clone(),
-            value: self.cur.literal().to_string(),
-        };
-        idents.push(ident);
-
-        // if there are more, separated by commas
-        while self.peek_token_is(TokenType::Comma) {
-            // advance twice so cur points to the identifier
-            self.next_token();
-            self.next_token();
-            let ident = Identifier {
-                token: self.cur.clone(),
-                value: self.cur.literal().to_string(),
-            };
-            idents.push(ident);
-        }
-
-        if !self.expect_peek(TokenType::RParen) {
-            return None;
-        }
-
-        Some(idents)
-    }
-
-    fn parse_call_expr(&mut self, func: Expr) -> Option<Expr> {
-        let token = self.cur.clone();
-        let args = self.parse_call_args()?;
-
-        Some(Expr::Call(CallExpr {
-            token,
-            func: func.into(),
-            args,
-        }))
-    }
-
-    fn parse_call_args(&mut self) -> Option<Vec<Expr>> {
-        let mut args = Vec::new();
-
-        if self.peek_token_is(TokenType::RParen) {
-            self.next_token();
-            return Some(args);
-        }
-
-        self.next_token();
-        args.push(self.parse_expr(Precedence::Lowest)?);
-        while self.peek_token_is(TokenType::Comma) {
-            self.next_token();
-            self.next_token();
-            args.push(self.parse_expr(Precedence::Lowest)?);
-        }
-
-        if !self.expect_peek(TokenType::RParen) {
-            return None;
-        }
-
-        Some(args)
-    }
-
-*/
