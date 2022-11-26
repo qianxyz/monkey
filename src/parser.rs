@@ -230,6 +230,14 @@ impl Parser {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ParseError;
+/*
+pub enum ParseError {
+    UnexpectedToken { expected: Token, got: Token },
+    ParseIntError(String),
+    NoPrefixParseFn(Token),
+    NoInfixParseFn(Token),
+}
+*/
 
 #[cfg(test)]
 mod tests {
@@ -321,7 +329,7 @@ return 993322;
         for (input, op) in cases {
             let mut parser = Parser::new(Lexer::new(input.to_string()));
             let prog = parser.parse_program();
-            //assert_eq!(parser.errors, vec![]);
+            assert_eq!(parser.errors, vec![]);
             assert_eq!(
                 prog.0[0],
                 Stmt::Expr(Expr::Infix {
@@ -379,6 +387,121 @@ return 993322;
             let program = parser.parse_program();
             assert_eq!(program.to_string(), expect);
         }
+    }
+
+    #[test]
+    fn boolean_expr() {
+        let cases = [("true;", true), ("false", false)];
+
+        for (input, b) in cases {
+            let mut parser = Parser::new(Lexer::new(input.to_string()));
+            let program = parser.parse_program();
+            assert_eq!(parser.errors, vec![]);
+            assert_eq!(program.0[0], Stmt::Expr(Expr::Bool(b)))
+        }
+    }
+
+    #[test]
+    fn if_expr() {
+        let input = "\
+if (x < y) { x; }
+if (x < y) { x; } else { y; }";
+        let x = || Expr::Ident(Ident("x".to_string()));
+        let y = || Expr::Ident(Ident("y".to_string()));
+
+        let mut parser = Parser::new(Lexer::new(input.to_string()));
+        let program = parser.parse_program();
+        assert_eq!(parser.errors, vec![]);
+        for i in 0..2 {
+            assert_eq!(
+                program.0[i],
+                Stmt::Expr(Expr::If {
+                    cond: Expr::Infix {
+                        op: Token::LT,
+                        left: x().into(),
+                        right: y().into()
+                    }
+                    .into(),
+                    consq: Block(vec![Stmt::Expr(x())]),
+                    alter: if i == 0 {
+                        None
+                    } else {
+                        Some(Block(vec![Stmt::Expr(y())]))
+                    }
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn function_literal() {
+        let input = "fn(x, y) { x + y; }";
+        let x = || Ident("x".to_string());
+        let y = || Ident("y".to_string());
+
+        let mut parser = Parser::new(Lexer::new(input.to_string()));
+        let program = parser.parse_program();
+        assert_eq!(parser.errors, vec![]);
+        assert_eq!(
+            program.0[0],
+            Stmt::Expr(Expr::Fn {
+                params: vec![x(), y()],
+                body: Block(vec![Stmt::Expr(Expr::Infix {
+                    op: Token::Plus,
+                    left: Expr::Ident(x()).into(),
+                    right: Expr::Ident(y()).into(),
+                })])
+            })
+        )
+    }
+
+    #[test]
+    fn func_params() {
+        let cases = [
+            ("fn() {};", vec![]),
+            ("fn(x) {};", vec!["x"]),
+            ("fn(x, y, z) {};", vec!["x", "y", "z"]),
+        ];
+
+        for (input, params) in cases {
+            let mut parser = Parser::new(Lexer::new(input.to_string()));
+            let prog = parser.parse_program();
+            assert_eq!(parser.errors, vec![]);
+            assert_eq!(
+                prog.0[0],
+                Stmt::Expr(Expr::Fn {
+                    params: params.iter().map(|s| Ident(s.to_string())).collect(),
+                    body: Block(vec![])
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn call_expr() {
+        let input = "add(1, 2 + 3, 4 * 5)";
+        let mut parser = Parser::new(Lexer::new(input.to_string()));
+        let prog = parser.parse_program();
+        assert_eq!(parser.errors, vec![]);
+        assert_eq!(
+            prog.0[0],
+            Stmt::Expr(Expr::Call {
+                func: Expr::Ident(Ident("add".to_string())).into(),
+                args: vec![
+                    Expr::Int(1),
+                    Expr::Infix {
+                        op: Token::Plus,
+                        left: Expr::Int(2).into(),
+                        right: Expr::Int(3).into()
+                    },
+                    Expr::Infix {
+                        op: Token::Asterisk,
+                        left: Expr::Int(4).into(),
+                        right: Expr::Int(5).into()
+                    },
+                ]
+            })
+        )
     }
 }
 
@@ -600,316 +723,6 @@ return 993322;
 
     fn peek_precedence(&self) -> Precedence {
         self.peek.ttype().into()
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum ParseError {
-    UnexpectedToken { expected: TokenType, got: TokenType },
-    ParseIntError(String),
-    NoPrefixParseFn(TokenType),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn parser_helper(input: &str) -> (Vec<Stmt>, Vec<ParseError>) {
-        let lexer = Lexer::new(input);
-        let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-
-        (program.stmts, parser.errors)
-    }
-
-    #[test]
-    fn let_stmts_error() {
-        let input = "\
-let x 5;
-let = 10;
-let 838383;
-";
-        use TokenType::*;
-        let errs = [(Assign, Int), (Ident, Assign), (Ident, Int)];
-
-        let (_, errors) = parser_helper(input);
-
-        for (e, (l, r)) in errors.iter().zip(errs.into_iter()) {
-            assert_eq!(
-                e,
-                &ParseError::UnexpectedToken {
-                    expected: l,
-                    got: r,
-                }
-            )
-        }
-
-        assert_eq!(errors.len(), 3);
-    }
-
-    #[test]
-    fn too_big_int() {
-        let input = "100000000000000000000000";
-        let (stmts, errors) = parser_helper(input);
-        assert!(stmts.is_empty());
-        assert_eq!(errors.len(), 1);
-
-        assert_eq!(errors[0], ParseError::ParseIntError(input.to_string()))
-    }
-
-    #[test]
-    fn boolean_expr() {
-        let inputs = [
-            ("true;", TokenType::True, true),
-            ("false", TokenType::False, false),
-        ];
-
-        for (input, ttype, b) in inputs {
-            let (stmts, errors) = parser_helper(input);
-            assert_eq!(errors, vec![]);
-            assert_eq!(stmts.len(), 1);
-            assert_eq!(
-                stmts[0],
-                Stmt::Expr(ExprStmt {
-                    token: Token::new(ttype, &b.to_string()),
-                    expr: Expr::Bool(Boolean {
-                        token: Token::new(ttype, &b.to_string()),
-                        value: b
-                    })
-                })
-            )
-        }
-    }
-
-    #[test]
-    fn if_expr() {
-        let input = "if (x < y) { x }";
-        let (stmts, errors) = parser_helper(input);
-
-        assert_eq!(
-            stmts[0],
-            Stmt::Expr(ExprStmt {
-                token: Token::new(TokenType::If, "if"),
-                expr: Expr::If(IfExpr {
-                    token: Token::new(TokenType::If, "if"),
-                    condition: Expr::Infix(InfixExpr {
-                        token: Token::new(TokenType::LT, "<"),
-                        left: Expr::Ident(Identifier {
-                            token: Token::new(TokenType::Ident, "x"),
-                            value: "x".to_string()
-                        })
-                        .into(),
-                        op: "<".to_string(),
-                        right: Expr::Ident(Identifier {
-                            token: Token::new(TokenType::Ident, "y"),
-                            value: "y".to_string()
-                        })
-                        .into(),
-                    })
-                    .into(),
-                    consequence: BlockStmt {
-                        token: Token::new(TokenType::LBrace, "{"),
-                        stmts: vec![Stmt::Expr(ExprStmt {
-                            token: Token::new(TokenType::Ident, "x"),
-                            expr: Expr::Ident(Identifier {
-                                token: Token::new(TokenType::Ident, "x"),
-                                value: "x".to_string()
-                            })
-                        })]
-                    },
-                    alternative: None
-                })
-            })
-        );
-        assert_eq!(errors, vec![]);
-        assert_eq!(stmts.len(), 1);
-    }
-
-    #[test]
-    fn if_else_expr() {
-        let input = "if (x < y) { x } else { y }";
-        let (stmts, errors) = parser_helper(input);
-
-        assert_eq!(
-            stmts[0],
-            Stmt::Expr(ExprStmt {
-                token: Token::new(TokenType::If, "if"),
-                expr: Expr::If(IfExpr {
-                    token: Token::new(TokenType::If, "if"),
-                    condition: Expr::Infix(InfixExpr {
-                        token: Token::new(TokenType::LT, "<"),
-                        left: Expr::Ident(Identifier {
-                            token: Token::new(TokenType::Ident, "x"),
-                            value: "x".to_string()
-                        })
-                        .into(),
-                        op: "<".to_string(),
-                        right: Expr::Ident(Identifier {
-                            token: Token::new(TokenType::Ident, "y"),
-                            value: "y".to_string()
-                        })
-                        .into(),
-                    })
-                    .into(),
-                    consequence: BlockStmt {
-                        token: Token::new(TokenType::LBrace, "{"),
-                        stmts: vec![Stmt::Expr(ExprStmt {
-                            token: Token::new(TokenType::Ident, "x"),
-                            expr: Expr::Ident(Identifier {
-                                token: Token::new(TokenType::Ident, "x"),
-                                value: "x".to_string()
-                            })
-                        })]
-                    },
-                    alternative: Some(BlockStmt {
-                        token: Token::new(TokenType::LBrace, "{"),
-                        stmts: vec![Stmt::Expr(ExprStmt {
-                            token: Token::new(TokenType::Ident, "y"),
-                            expr: Expr::Ident(Identifier {
-                                token: Token::new(TokenType::Ident, "y"),
-                                value: "y".to_string()
-                            })
-                        })]
-                    }),
-                })
-            })
-        );
-        assert_eq!(errors, vec![]);
-        assert_eq!(stmts.len(), 1);
-    }
-
-    #[test]
-    fn function_literal() {
-        let input = "fn(x, y) { x + y; }";
-        let (stmts, _) = parser_helper(input);
-
-        assert_eq!(
-            stmts[0],
-            Stmt::Expr(ExprStmt {
-                token: Token::new(TokenType::Function, "fn"),
-                expr: Expr::Fn(FuncLiteral {
-                    token: Token::new(TokenType::Function, "fn"),
-                    params: vec![
-                        Identifier {
-                            token: Token::new(TokenType::Ident, "x"),
-                            value: "x".to_string()
-                        },
-                        Identifier {
-                            token: Token::new(TokenType::Ident, "y"),
-                            value: "y".to_string()
-                        },
-                    ],
-                    body: BlockStmt {
-                        token: Token::new(TokenType::LBrace, "{"),
-                        stmts: vec![Stmt::Expr(ExprStmt {
-                            token: Token::new(TokenType::Ident, "x"),
-                            expr: Expr::Infix(InfixExpr {
-                                token: Token::new(TokenType::Plus, "+"),
-                                left: Expr::Ident(Identifier {
-                                    token: Token::new(TokenType::Ident, "x"),
-                                    value: "x".to_string()
-                                })
-                                .into(),
-                                op: "+".to_string(),
-                                right: Expr::Ident(Identifier {
-                                    token: Token::new(TokenType::Ident, "y"),
-                                    value: "y".to_string()
-                                })
-                                .into(),
-                            })
-                        })]
-                    }
-                })
-            })
-        );
-    }
-
-    #[test]
-    fn func_params() {
-        let cases = [
-            ("fn() {};", vec![]),
-            ("fn(x) {};", vec!["x"]),
-            ("fn(x, y, z) {};", vec!["x", "y", "z"]),
-        ];
-
-        for (input, params) in cases {
-            let (stmts, _) = parser_helper(input);
-            assert_eq!(
-                stmts[0],
-                Stmt::Expr(ExprStmt {
-                    token: Token::new(TokenType::Function, "fn"),
-                    expr: Expr::Fn(FuncLiteral {
-                        token: Token::new(TokenType::Function, "fn"),
-                        params: params
-                            .iter()
-                            .map(|x| Identifier {
-                                token: Token::new(TokenType::Ident, x),
-                                value: x.to_string()
-                            })
-                            .collect(),
-                        body: BlockStmt {
-                            token: Token::new(TokenType::LBrace, "{"),
-                            stmts: vec![]
-                        }
-                    })
-                })
-            );
-        }
-    }
-
-    #[test]
-    fn call_expr() {
-        let input = "add(1, 2 + 3, 4 * 5)";
-        let (stmts, errors) = parser_helper(input);
-        assert_eq!(errors, vec![]);
-        assert_eq!(
-            stmts[0],
-            Stmt::Expr(ExprStmt {
-                token: Token::new(TokenType::Ident, "add"),
-                expr: Expr::Call(CallExpr {
-                    token: Token::new(TokenType::LParen, "("),
-                    func: Expr::Ident(Identifier {
-                        token: Token::new(TokenType::Ident, "add"),
-                        value: "add".to_string()
-                    })
-                    .into(),
-                    args: vec![
-                        Expr::Int(IntLiteral {
-                            token: Token::new(TokenType::Int, "1"),
-                            value: 1
-                        }),
-                        Expr::Infix(InfixExpr {
-                            token: Token::new(TokenType::Plus, "+"),
-                            left: Expr::Int(IntLiteral {
-                                token: Token::new(TokenType::Int, "2"),
-                                value: 2
-                            })
-                            .into(),
-                            op: "+".to_string(),
-                            right: Expr::Int(IntLiteral {
-                                token: Token::new(TokenType::Int, "3"),
-                                value: 3
-                            })
-                            .into(),
-                        }),
-                        Expr::Infix(InfixExpr {
-                            token: Token::new(TokenType::Asterisk, "*"),
-                            left: Expr::Int(IntLiteral {
-                                token: Token::new(TokenType::Int, "4"),
-                                value: 4
-                            })
-                            .into(),
-                            op: "*".to_string(),
-                            right: Expr::Int(IntLiteral {
-                                token: Token::new(TokenType::Int, "5"),
-                                value: 5
-                            })
-                            .into(),
-                        }),
-                    ]
-                })
-            })
-        )
     }
 }
 */
