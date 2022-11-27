@@ -237,7 +237,7 @@ impl Parser {
         while self.curr != Token::RBrace && self.curr != Token::Eof {
             stmts.push(self.parse_stmt()?);
         }
-        self.next_token(); // skip the `{`
+        self.assert_curr(Token::RBrace)?;
 
         Ok(Block(stmts))
     }
