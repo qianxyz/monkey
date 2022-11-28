@@ -27,6 +27,6 @@ pub fn run() {
             continue;
         }
 
-        print!("{}", program);
+        println!("{:#?}", program);
     }
 }
