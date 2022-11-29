@@ -22,7 +22,7 @@ fn eval_stmt(stmt: Stmt) -> RuntimeResult<Object> {
 fn eval_expr(expr: Expr) -> RuntimeResult<Object> {
     match expr {
         Expr::Int(n) => Ok(Object::Int(n)),
-        Expr::Bool(_) => todo!(),
+        Expr::Bool(b) => Ok(Object::Bool(b)),
         _ => todo!(),
     }
 }
@@ -53,6 +53,15 @@ mod tests {
 
         for (input, val) in cases {
             assert_eq!(eval_helper(input), Object::Int(val));
+        }
+    }
+
+    #[test]
+    fn bool_literal() {
+        let cases = [("true;", true), ("false", false)];
+
+        for (input, val) in cases {
+            assert_eq!(eval_helper(input), Object::Bool(val));
         }
     }
 }
