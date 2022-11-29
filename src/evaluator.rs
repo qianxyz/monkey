@@ -2,14 +2,14 @@ use crate::ast::{Block, Expr, InfixOp, PrefixOp, Program, Stmt};
 use crate::object::Object;
 
 pub fn eval_program(prog: Program) -> RuntimeResult<Object> {
-    eval_stmts(prog.0)
-}
-
-fn eval_stmts(stmts: Vec<Stmt>) -> RuntimeResult<Object> {
     let mut result = Object::Null;
 
-    for stmt in stmts {
+    for stmt in prog.0 {
         result = eval_stmt(stmt)?;
+        // if we hit a `return`, unwrap the value and early return
+        if let Object::Ret(e) = result {
+            return Ok(*e);
+        }
     }
 
     Ok(result)
@@ -18,7 +18,7 @@ fn eval_stmts(stmts: Vec<Stmt>) -> RuntimeResult<Object> {
 fn eval_stmt(stmt: Stmt) -> RuntimeResult<Object> {
     match stmt {
         Stmt::Let(_, _) => todo!(),
-        Stmt::Ret(_) => todo!(),
+        Stmt::Ret(e) => Ok(Object::Ret(eval_expr(e)?.into())),
         Stmt::Expr(e) => eval_expr(e),
     }
 }
@@ -43,7 +43,7 @@ fn eval_prefix(op: PrefixOp, right: Object) -> RuntimeResult<Object> {
             Object::Int(n) => Ok(Object::Int(-n)),
             _ => Err(RuntimeError), // bad operand type for "-"
         },
-        PrefixOp::Not => Ok(Object::Bool(!is_truthy(right))),
+        PrefixOp::Not => Ok(Object::Bool(!bool::from(&right))),
     }
 }
 
@@ -70,21 +70,27 @@ fn eval_infix(op: InfixOp, left: Object, right: Object) -> RuntimeResult<Object>
 fn eval_if(cond: Expr, consq: Block, alter: Option<Block>) -> RuntimeResult<Object> {
     let cond = eval_expr(cond)?;
 
-    if is_truthy(cond) {
-        eval_stmts(consq.0)
+    if bool::from(&cond) {
+        eval_block(consq)
     } else if let Some(block) = alter {
-        eval_stmts(block.0)
+        eval_block(block)
     } else {
         Ok(Object::Null)
     }
 }
 
-fn is_truthy(obj: Object) -> bool {
-    match obj {
-        Object::Int(n) => n != 0,
-        Object::Bool(b) => b,
-        Object::Null => false,
+fn eval_block(block: Block) -> RuntimeResult<Object> {
+    let mut result = Object::Null;
+
+    for stmt in block.0 {
+        result = eval_stmt(stmt)?;
+        // if we hit a `return`, do NOT unwrap, return the `Ret` variant
+        if let Object::Ret(_) = result {
+            return Ok(result);
+        }
     }
+
+    Ok(result)
 }
 
 #[derive(Debug)]
@@ -181,6 +187,31 @@ mod tests {
                     None => Object::Null,
                 }
             )
+        }
+    }
+
+    #[test]
+    fn return_expr() {
+        let cases = [
+            ("return 10;", 10),
+            ("return 10; 9;", 10),
+            ("return 2 * 5; 9;", 10),
+            ("9; return 2 * 5; 9;", 10),
+            (
+                "\
+if (10 > 1) {
+    if (10 > 1) {
+        return 10;
+    }
+    return 1;
+}
+",
+                10,
+            ),
+        ];
+
+        for (input, val) in cases {
+            assert_eq!(eval_helper(input), Object::Int(val))
         }
     }
 }
