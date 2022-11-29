@@ -1,10 +1,14 @@
-use crate::ast::{Expr, InfixOp, PrefixOp, Program, Stmt};
+use crate::ast::{Block, Expr, InfixOp, PrefixOp, Program, Stmt};
 use crate::object::Object;
 
 pub fn eval_program(prog: Program) -> RuntimeResult<Object> {
+    eval_stmts(prog.0)
+}
+
+fn eval_stmts(stmts: Vec<Stmt>) -> RuntimeResult<Object> {
     let mut result = Object::Null;
 
-    for stmt in prog.0 {
+    for stmt in stmts {
         result = eval_stmt(stmt)?;
     }
 
@@ -25,25 +29,21 @@ fn eval_expr(expr: Expr) -> RuntimeResult<Object> {
         Expr::Bool(b) => Ok(Object::Bool(b)),
         Expr::Prefix { op, right } => eval_prefix(op, eval_expr(*right)?),
         Expr::Infix { op, left, right } => eval_infix(op, eval_expr(*left)?, eval_expr(*right)?),
+        Expr::If { cond, consq, alter } => eval_if(*cond, consq, alter),
         _ => todo!(),
     }
 }
 
 fn eval_prefix(op: PrefixOp, right: Object) -> RuntimeResult<Object> {
-    // TODO: what should these return?
-    // 1. "!0" and "!1"
-    // 2. "-true" and "-false"
-    // 3. "-null"
+    // Design choices:
+    // 1. `-` should only accept number as operand.
+    // 2. `!` applies to the `truthy value` of its operand.
     match op {
         PrefixOp::Negate => match right {
             Object::Int(n) => Ok(Object::Int(-n)),
             _ => Err(RuntimeError), // bad operand type for "-"
         },
-        PrefixOp::Not => match right {
-            Object::Bool(b) => Ok(Object::Bool(!b)),
-            Object::Null => Ok(Object::Bool(true)),
-            Object::Int(n) => Ok(Object::Bool(n == 0)),
-        },
+        PrefixOp::Not => Ok(Object::Bool(!is_truthy(right))),
     }
 }
 
@@ -64,6 +64,26 @@ fn eval_infix(op: InfixOp, left: Object, right: Object) -> RuntimeResult<Object>
             InfixOp::NQ => Ok(Object::Bool(left != right)),
             _ => Err(RuntimeError), // bad operands for op
         },
+    }
+}
+
+fn eval_if(cond: Expr, consq: Block, alter: Option<Block>) -> RuntimeResult<Object> {
+    let cond = eval_expr(cond)?;
+
+    if is_truthy(cond) {
+        eval_stmts(consq.0)
+    } else if let Some(block) = alter {
+        eval_stmts(block.0)
+    } else {
+        Ok(Object::Null)
+    }
+}
+
+fn is_truthy(obj: Object) -> bool {
+    match obj {
+        Object::Int(n) => n != 0,
+        Object::Bool(b) => b,
+        Object::Null => false,
     }
 }
 
@@ -138,6 +158,29 @@ mod tests {
 
         for (input, val) in cases {
             assert_eq!(eval_helper(input), Object::Bool(val));
+        }
+    }
+
+    #[test]
+    fn if_expr() {
+        let cases = [
+            ("if (true) { 10 }", Some(10)),
+            ("if (false) { 10 }", None),
+            ("if (1) { 10 }", Some(10)),
+            ("if (1 < 2) { 10 }", Some(10)),
+            ("if (1 > 2) { 10 }", None),
+            ("if (1 > 2) { 10 } else { 20 }", Some(20)),
+            ("if (1 < 2) { 10 } else { 20 }", Some(10)),
+        ];
+
+        for (input, val) in cases {
+            assert_eq!(
+                eval_helper(input),
+                match val {
+                    Some(n) => Object::Int(n),
+                    None => Object::Null,
+                }
+            )
         }
     }
 }
