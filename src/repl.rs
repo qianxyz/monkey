@@ -1,5 +1,6 @@
 use std::io::{self, BufRead, Write};
 
+use crate::evaluator::eval_program;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 
@@ -27,6 +28,10 @@ pub fn run() {
             continue;
         }
 
-        println!("{:#?}", program);
+        let evaluated = eval_program(program);
+        match evaluated {
+            Ok(obj) => println!("{}", obj),
+            Err(e) => println!("\t{:?}", e),
+        }
     }
 }
