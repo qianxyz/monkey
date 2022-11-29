@@ -2,6 +2,80 @@ use std::fmt;
 
 use crate::token::Token;
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum PrefixOp {
+    Negate,
+    Not,
+}
+
+impl TryFrom<&Token> for PrefixOp {
+    type Error = ();
+
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        match value {
+            Token::Minus => Ok(Self::Negate),
+            Token::Bang => Ok(Self::Not),
+            _ => Err(()),
+        }
+    }
+}
+
+impl fmt::Display for PrefixOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Negate => "-",
+            Self::Not => "!",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum InfixOp {
+    Plus,
+    Minus,
+    Mult,
+    Div,
+    EQ,
+    NQ,
+    LT,
+    GT,
+}
+
+impl TryFrom<&Token> for InfixOp {
+    type Error = ();
+
+    fn try_from(value: &Token) -> Result<Self, Self::Error> {
+        match value {
+            Token::Plus => Ok(Self::Plus),
+            Token::Minus => Ok(Self::Minus),
+            Token::Asterisk => Ok(Self::Mult),
+            Token::Slash => Ok(Self::Div),
+            Token::EQ => Ok(Self::EQ),
+            Token::NQ => Ok(Self::NQ),
+            Token::LT => Ok(Self::LT),
+            Token::GT => Ok(Self::GT),
+            _ => Err(()),
+        }
+    }
+}
+
+impl fmt::Display for InfixOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Plus => "+",
+            Self::Minus => "-",
+            Self::Mult => "*",
+            Self::Div => "/",
+            Self::EQ => "==",
+            Self::NQ => "!=",
+            Self::LT => "<",
+            Self::GT => ">",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 /// A program is a list of statements
 #[derive(Debug, PartialEq, Eq)]
 pub struct Program(pub Vec<Stmt>);
@@ -69,14 +143,11 @@ pub enum Expr {
     Bool(bool),
 
     /// A prefix expression
-    Prefix {
-        op: Token, // `-` or `!`
-        right: Box<Expr>,
-    },
+    Prefix { op: PrefixOp, right: Box<Expr> },
 
     /// An infix expression
     Infix {
-        op: Token, // `+`, `*`, etc.
+        op: InfixOp,
         left: Box<Expr>,
         right: Box<Expr>,
     },

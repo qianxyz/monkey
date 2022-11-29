@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::ast::{Block, Expr, Ident, Program, Stmt};
+use crate::ast::{Block, Expr, Ident, InfixOp, PrefixOp, Program, Stmt};
 use crate::lexer::Lexer;
 use crate::token::Token;
 
@@ -135,23 +135,33 @@ impl Parser {
 
     fn parse_expr(&mut self, precedence: Precedence) -> ParseResult<Expr> {
         use Token::*;
-        let mut left = match self.curr {
+        let mut left = match &self.curr {
             Ident(_) => self.parse_ident(),
             Int(_) => self.parse_int(),
-            Minus | Bang => self.parse_prefix(),
             True | False => self.parse_boolean(),
             LParen => self.parse_grouped_expr(),
             If => self.parse_if_expr(),
             Function => self.parse_func_literal(),
-            _ => return Err(ParseError::NoPrefixParseFn(self.next_token())),
+            t => {
+                if let Ok(op) = PrefixOp::try_from(t) {
+                    self.parse_prefix(op)
+                } else {
+                    return Err(ParseError::NoPrefixParseFn(self.next_token()));
+                }
+            }
         }?;
 
         while precedence < Precedence::from(&self.curr) {
-            left = match self.curr {
-                Plus | Minus | Slash | Asterisk | EQ | NQ | LT | GT => self.parse_infix(left)?,
-                LParen => self.parse_call_expr(left)?,
-                _ => return Err(ParseError::NoInfixParseFn(self.next_token())),
-            };
+            left = match &self.curr {
+                LParen => self.parse_call_expr(left),
+                t => {
+                    if let Ok(op) = InfixOp::try_from(t) {
+                        self.parse_infix(op, left)
+                    } else {
+                        return Err(ParseError::NoInfixParseFn(self.next_token()));
+                    }
+                }
+            }?;
         }
 
         Ok(left)
@@ -170,16 +180,15 @@ impl Parser {
         }
     }
 
-    fn parse_prefix(&mut self) -> ParseResult<Expr> {
-        let op = self.next_token();
+    fn parse_prefix(&mut self, op: PrefixOp) -> ParseResult<Expr> {
+        self.next_token();
         let right = Box::new(self.parse_expr(Precedence::Prefix)?);
 
         Ok(Expr::Prefix { op, right })
     }
 
-    fn parse_infix(&mut self, left: Expr) -> ParseResult<Expr> {
-        let prec = Precedence::from(&self.curr);
-        let op = self.next_token();
+    fn parse_infix(&mut self, op: InfixOp, left: Expr) -> ParseResult<Expr> {
+        let prec = Precedence::from(&self.next_token());
         let right = Box::new(self.parse_expr(prec)?);
 
         Ok(Expr::Infix {
@@ -390,7 +399,7 @@ return 993322;
 
     #[test]
     fn prefix_expr() {
-        let cases = [("!5;", Token::Bang, 5), ("-15;", Token::Minus, 15)];
+        let cases = [("!5;", PrefixOp::Not, 5), ("-15;", PrefixOp::Negate, 15)];
 
         for (input, op, n) in cases {
             let stmts = parse_helper(input);
@@ -406,12 +415,12 @@ return 993322;
 
     #[test]
     fn infix_expr() {
-        use Token::*;
+        use InfixOp::*;
         let cases = [
             ("5 + 5;", Plus),
             ("5 - 5;", Minus),
-            ("5 * 5;", Asterisk),
-            ("5 / 5;", Slash),
+            ("5 * 5;", Mult),
+            ("5 / 5;", Div),
             ("5 > 5;", GT),
             ("5 < 5;", LT),
             ("5 == 5;", EQ),
@@ -505,7 +514,7 @@ if (x < y) { x; } else { y; }";
                 stmts[i],
                 Stmt::Expr(Expr::If {
                     cond: Expr::Infix {
-                        op: Token::LT,
+                        op: InfixOp::LT,
                         left: x().into(),
                         right: y().into()
                     }
@@ -533,7 +542,7 @@ if (x < y) { x; } else { y; }";
             Stmt::Expr(Expr::Fn {
                 params: vec![x(), y()],
                 body: Block(vec![Stmt::Expr(Expr::Infix {
-                    op: Token::Plus,
+                    op: InfixOp::Plus,
                     left: Expr::Ident(x()).into(),
                     right: Expr::Ident(y()).into(),
                 })])
@@ -573,12 +582,12 @@ if (x < y) { x; } else { y; }";
                 args: vec![
                     Expr::Int(1),
                     Expr::Infix {
-                        op: Token::Plus,
+                        op: InfixOp::Plus,
                         left: Expr::Int(2).into(),
                         right: Expr::Int(3).into()
                     },
                     Expr::Infix {
-                        op: Token::Asterisk,
+                        op: InfixOp::Mult,
                         left: Expr::Int(4).into(),
                         right: Expr::Int(5).into()
                     },

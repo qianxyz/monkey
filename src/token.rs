@@ -34,23 +34,3 @@ impl Token {
         }
     }
 }
-
-// this is only implemented for printing ast
-impl std::fmt::Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Self::Assign => "=",
-            Self::Plus => "+",
-            Self::Minus => "-",
-            Self::Bang => "!",
-            Self::Asterisk => "*",
-            Self::Slash => "/",
-            Self::LT => "<",
-            Self::GT => ">",
-            Self::EQ => "==",
-            Self::NQ => "!=",
-            _ => unimplemented!(),
-        };
-        write!(f, "{}", s)
-    }
-}
