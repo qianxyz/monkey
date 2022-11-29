@@ -41,7 +41,7 @@ fn eval_prefix(op: PrefixOp, right: Object) -> RuntimeResult<Object> {
     match op {
         PrefixOp::Negate => match right {
             Object::Int(n) => Ok(Object::Int(-n)),
-            _ => Err(RuntimeError), // bad operand type for "-"
+            _ => Err(RuntimeError::BadUnaryOperand(op, right)),
         },
         PrefixOp::Not => Ok(Object::Bool(!bool::from(&right))),
     }
@@ -53,7 +53,13 @@ fn eval_infix(op: InfixOp, left: Object, right: Object) -> RuntimeResult<Object>
             InfixOp::Plus => Ok(Object::Int(l + r)),
             InfixOp::Minus => Ok(Object::Int(l - r)),
             InfixOp::Mult => Ok(Object::Int(l * r)),
-            InfixOp::Div => Ok(Object::Int(l / r)),
+            InfixOp::Div => {
+                if *r != 0 {
+                    Ok(Object::Int(l / r))
+                } else {
+                    Err(RuntimeError::ZeroDivisionError)
+                }
+            }
             InfixOp::EQ => Ok(Object::Bool(l == r)),
             InfixOp::NQ => Ok(Object::Bool(l != r)),
             InfixOp::LT => Ok(Object::Bool(l < r)),
@@ -62,7 +68,7 @@ fn eval_infix(op: InfixOp, left: Object, right: Object) -> RuntimeResult<Object>
         _ => match op {
             InfixOp::EQ => Ok(Object::Bool(left == right)),
             InfixOp::NQ => Ok(Object::Bool(left != right)),
-            _ => Err(RuntimeError), // bad operands for op
+            _ => Err(RuntimeError::BadBinaryOperand(op, left, right)),
         },
     }
 }
@@ -94,7 +100,11 @@ fn eval_block(block: Block) -> RuntimeResult<Object> {
 }
 
 #[derive(Debug)]
-pub struct RuntimeError;
+pub enum RuntimeError {
+    BadUnaryOperand(PrefixOp, Object),
+    BadBinaryOperand(InfixOp, Object, Object),
+    ZeroDivisionError,
+}
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
