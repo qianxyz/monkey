@@ -206,7 +206,7 @@ impl fmt::Display for Expr {
 }
 
 /// An identifier is a string
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Ident(pub String);
 
 impl fmt::Display for Ident {

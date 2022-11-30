@@ -1,11 +1,12 @@
-use crate::ast::{Block, Expr, InfixOp, PrefixOp, Program, Stmt};
+use crate::ast::{Block, Expr, Ident, InfixOp, PrefixOp, Program, Stmt};
+use crate::environment::Environment;
 use crate::object::Object;
 
-pub fn eval_program(prog: Program) -> RuntimeResult<Object> {
+pub fn eval_program(prog: Program, env: &mut Environment) -> RuntimeResult<Object> {
     let mut result = Object::Null;
 
     for stmt in prog.0 {
-        result = eval_stmt(stmt)?;
+        result = eval_stmt(stmt, env)?;
         // if we hit a `return`, unwrap the value and early return
         if let Object::Ret(e) = result {
             return Ok(*e);
@@ -15,21 +16,30 @@ pub fn eval_program(prog: Program) -> RuntimeResult<Object> {
     Ok(result)
 }
 
-fn eval_stmt(stmt: Stmt) -> RuntimeResult<Object> {
+fn eval_stmt(stmt: Stmt, env: &mut Environment) -> RuntimeResult<Object> {
     match stmt {
-        Stmt::Let(_, _) => todo!(),
-        Stmt::Ret(e) => Ok(Object::Ret(eval_expr(e)?.into())),
-        Stmt::Expr(e) => eval_expr(e),
+        Stmt::Let(ident, e) => {
+            let obj = eval_expr(e, env)?;
+            env.set(ident, obj);
+            // The let statement itself evaluates to null.
+            // Another option is to make it a walrus operator.
+            Ok(Object::Null)
+        }
+        Stmt::Ret(e) => Ok(Object::Ret(eval_expr(e, env)?.into())),
+        Stmt::Expr(e) => eval_expr(e, env),
     }
 }
 
-fn eval_expr(expr: Expr) -> RuntimeResult<Object> {
+fn eval_expr(expr: Expr, env: &mut Environment) -> RuntimeResult<Object> {
     match expr {
         Expr::Int(n) => Ok(Object::Int(n)),
         Expr::Bool(b) => Ok(Object::Bool(b)),
-        Expr::Prefix { op, right } => eval_prefix(op, eval_expr(*right)?),
-        Expr::Infix { op, left, right } => eval_infix(op, eval_expr(*left)?, eval_expr(*right)?),
-        Expr::If { cond, consq, alter } => eval_if(*cond, consq, alter),
+        Expr::Prefix { op, right } => eval_prefix(op, eval_expr(*right, env)?),
+        Expr::Infix { op, left, right } => {
+            eval_infix(op, eval_expr(*left, env)?, eval_expr(*right, env)?)
+        }
+        Expr::If { cond, consq, alter } => eval_if(*cond, consq, alter, env),
+        Expr::Ident(ident) => env.get(ident),
         _ => todo!(),
     }
 }
@@ -73,23 +83,28 @@ fn eval_infix(op: InfixOp, left: Object, right: Object) -> RuntimeResult<Object>
     }
 }
 
-fn eval_if(cond: Expr, consq: Block, alter: Option<Block>) -> RuntimeResult<Object> {
-    let cond = eval_expr(cond)?;
+fn eval_if(
+    cond: Expr,
+    consq: Block,
+    alter: Option<Block>,
+    env: &mut Environment,
+) -> RuntimeResult<Object> {
+    let cond = eval_expr(cond, env)?;
 
     if bool::from(&cond) {
-        eval_block(consq)
+        eval_block(consq, env)
     } else if let Some(block) = alter {
-        eval_block(block)
+        eval_block(block, env)
     } else {
         Ok(Object::Null)
     }
 }
 
-fn eval_block(block: Block) -> RuntimeResult<Object> {
+fn eval_block(block: Block, env: &mut Environment) -> RuntimeResult<Object> {
     let mut result = Object::Null;
 
     for stmt in block.0 {
-        result = eval_stmt(stmt)?;
+        result = eval_stmt(stmt, env)?;
         // if we hit a `return`, do NOT unwrap, return the `Ret` variant
         if let Object::Ret(_) = result {
             return Ok(result);
@@ -104,6 +119,7 @@ pub enum RuntimeError {
     BadUnaryOperand(PrefixOp, Object),
     BadBinaryOperand(InfixOp, Object, Object),
     ZeroDivisionError,
+    UnboundIdentifier(Ident),
 }
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
@@ -120,7 +136,7 @@ mod tests {
         let prog = parser.parse_program();
         assert_eq!(parser.errors(), vec![]);
 
-        eval_program(prog).unwrap()
+        eval_program(prog, &mut Environment::new()).unwrap()
     }
 
     #[test]
@@ -218,6 +234,20 @@ if (10 > 1) {
 ",
                 10,
             ),
+        ];
+
+        for (input, val) in cases {
+            assert_eq!(eval_helper(input), Object::Int(val))
+        }
+    }
+
+    #[test]
+    fn let_expr() {
+        let cases = [
+            ("let a = 5; a;", 5),
+            ("let a = 5 * 5; a;", 25),
+            ("let a = 5; let b = a; b;", 5),
+            ("let a = 5; let b = a; let c = a + b + 5; c;", 15),
         ];
 
         for (input, val) in cases {
