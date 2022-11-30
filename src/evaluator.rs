@@ -39,8 +39,48 @@ fn eval_expr(expr: Expr, env: &mut Environment) -> RuntimeResult<Object> {
             eval_infix(op, eval_expr(*left, env)?, eval_expr(*right, env)?)
         }
         Expr::If { cond, consq, alter } => eval_if(*cond, consq, alter, env),
-        Expr::Ident(ident) => env.get(ident),
-        _ => todo!(),
+        Expr::Ident(ident) => env.get(&ident),
+        Expr::Fn { params, body } => Ok(Object::Fn {
+            params,
+            body,
+            env: env.clone(),
+        }),
+        Expr::Call { func, args } => {
+            // eval func and args into objects
+            let func = eval_expr(*func, env)?;
+            let args = args
+                .into_iter()
+                .map(|e| eval_expr(e, env))
+                .collect::<RuntimeResult<Vec<Object>>>()?;
+            let Object::Fn { params, body, env } = func else {
+                return Err(RuntimeError::NotCallable(func));
+            };
+
+            // check if # of args match
+            if params.len() != args.len() {
+                return Err(RuntimeError::BadNumOfArguments {
+                    expected: params.len(),
+                    got: args.len(),
+                });
+            }
+
+            // prepare environment, create local bindings
+            let mut extended_env = Environment::enclose(env);
+            for (ident, obj) in params.into_iter().zip(args.into_iter()) {
+                extended_env.set(ident, obj);
+            }
+
+            // eval the block in local scope
+            let result = eval_block(body, &mut extended_env)?;
+
+            // unpack if result is a return variant;
+            // we don't want this to bubble up
+            if let Object::Ret(e) = result {
+                Ok(*e)
+            } else {
+                Ok(result)
+            }
+        }
     }
 }
 
@@ -120,6 +160,8 @@ pub enum RuntimeError {
     BadBinaryOperand(InfixOp, Object, Object),
     ZeroDivisionError,
     UnboundIdentifier(Ident),
+    NotCallable(Object),
+    BadNumOfArguments { expected: usize, got: usize },
 }
 
 pub type RuntimeResult<T> = Result<T, RuntimeError>;
@@ -253,5 +295,33 @@ if (10 > 1) {
         for (input, val) in cases {
             assert_eq!(eval_helper(input), Object::Int(val))
         }
+    }
+
+    #[test]
+    fn function_application() {
+        let cases = [
+            ("let identity = fn(x) { x; }; identity(5);", 5),
+            ("let identity = fn(x) { return x; }; identity(5);", 5),
+            ("let double = fn(x) { x * 2; }; double(5);", 10),
+            ("let add = fn(x, y) { x + y; }; add(5, 5);", 10),
+            ("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", 20),
+            ("fn(x) { x; }(5)", 5),
+        ];
+
+        for (input, val) in cases {
+            assert_eq!(eval_helper(input), Object::Int(val))
+        }
+    }
+
+    #[test]
+    fn closure() {
+        let input = "\
+let newAdder = fn(x) {
+    fn(y) { x + y };
+};
+let addTwo = newAdder(2);
+addTwo(2);
+";
+        assert_eq!(eval_helper(input), Object::Int(4))
     }
 }

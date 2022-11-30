@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::token::Token;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PrefixOp {
     Negate,
     Not,
@@ -30,7 +30,7 @@ impl fmt::Display for PrefixOp {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum InfixOp {
     Plus,
     Minus,
@@ -90,7 +90,7 @@ impl fmt::Display for Program {
 }
 
 /// Statements
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Stmt {
     /// let <ident> = <expr>
     Let(Ident, Expr),
@@ -113,7 +113,7 @@ impl fmt::Display for Stmt {
 }
 
 /// A block of statements, wrapped in braces
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Block(pub Vec<Stmt>);
 
 impl fmt::Display for Block {
@@ -131,7 +131,7 @@ impl fmt::Display for Block {
 }
 
 /// Expressions
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expr {
     /// An identifier as an expression
     Ident(Ident),
@@ -206,7 +206,7 @@ impl fmt::Display for Expr {
 }
 
 /// An identifier is a string
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Ident(pub String);
 
 impl fmt::Display for Ident {

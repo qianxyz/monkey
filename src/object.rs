@@ -1,11 +1,21 @@
 use std::fmt;
 
+use crate::{
+    ast::{Block, Ident},
+    environment::Environment,
+};
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Object {
     Int(i32),
     Bool(bool),
     Null,
     Ret(Box<Object>),
+    Fn {
+        params: Vec<Ident>,
+        body: Block,
+        env: Environment,
+    },
 }
 
 // Get the `truthy value` of the object.
@@ -28,6 +38,22 @@ impl fmt::Display for Object {
             Self::Bool(b) => write!(f, "{}", b),
             Self::Null => write!(f, "null"),
             Self::Ret(obj) => write!(f, "{}", obj),
+            Self::Fn {
+                params,
+                body,
+                env: _,
+            } => {
+                write!(
+                    f,
+                    "fn({}) {}",
+                    params
+                        .iter()
+                        .map(|i| i.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    body
+                )
+            }
         }
     }
 }
