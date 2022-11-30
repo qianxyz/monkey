@@ -43,7 +43,12 @@ fn eval_expr(expr: Expr, env: &mut Environment) -> RuntimeResult<Object> {
         Expr::Fn { params, body } => Ok(Object::Fn {
             params,
             body,
-            env: env.clone(),
+            //env: env.clone(),
+            env: todo!(),
+            // TODO: cloning the scope here makes recursion impossible. e.g.,
+            // let fact = fn(n) { if (n == 0) { 1 } else { n * fact(n - 1) } }
+            // The scope of fn will not contain `fact` itself.
+            // Maybe we should use Rc<RefCell<Environment>>.
         }),
         Expr::Call { func, args } => {
             // eval func and args into objects
@@ -298,7 +303,7 @@ if (10 > 1) {
     }
 
     #[test]
-    fn function_application() {
+    fn func_call() {
         let cases = [
             ("let identity = fn(x) { x; }; identity(5);", 5),
             ("let identity = fn(x) { return x; }; identity(5);", 5),
