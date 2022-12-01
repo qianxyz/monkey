@@ -1,162 +1,187 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::ast::{Block, Expr, Ident, InfixOp, PrefixOp, Program, Stmt};
 use crate::environment::Environment;
 use crate::object::Object;
 
-pub fn eval_program(prog: Program, env: &mut Environment) -> RuntimeResult<Object> {
-    let mut result = Object::Null;
+pub struct Evaluator {
+    env: Rc<RefCell<Environment>>,
+}
 
-    for stmt in prog.0 {
-        result = eval_stmt(stmt, env)?;
-        // if we hit a `return`, unwrap the value and early return
-        if let Object::Ret(e) = result {
-            return Ok(*e);
+impl Evaluator {
+    pub fn new() -> Self {
+        Self {
+            env: Rc::new(RefCell::new(Environment::new())),
         }
     }
 
-    Ok(result)
-}
+    pub fn eval_program(&mut self, prog: Program) -> RuntimeResult<Object> {
+        let mut result = Object::Null;
 
-fn eval_stmt(stmt: Stmt, env: &mut Environment) -> RuntimeResult<Object> {
-    match stmt {
-        Stmt::Let(ident, e) => {
-            let obj = eval_expr(e, env)?;
-            env.set(ident, obj);
-            // The let statement itself evaluates to null.
-            // Another option is to make it a walrus operator.
+        for stmt in prog.0 {
+            result = self.eval_stmt(stmt)?;
+            // if we hit a `return`, unwrap the value and early return
+            if let Object::Ret(e) = result {
+                return Ok(*e);
+            }
+        }
+
+        Ok(result)
+    }
+
+    fn eval_stmt(&mut self, stmt: Stmt) -> RuntimeResult<Object> {
+        match stmt {
+            Stmt::Let(ident, expr) => {
+                let obj = self.eval_expr(expr)?;
+                self.env.borrow_mut().set(ident, obj);
+                // The let statement itself evaluates to null.
+                Ok(Object::Null)
+            }
+            Stmt::Ret(e) => Ok(Object::Ret(self.eval_expr(e)?.into())),
+            Stmt::Expr(e) => self.eval_expr(e),
+        }
+    }
+
+    fn eval_expr(&mut self, expr: Expr) -> RuntimeResult<Object> {
+        match expr {
+            Expr::Int(n) => Ok(Object::Int(n)),
+            Expr::Bool(b) => Ok(Object::Bool(b)),
+            Expr::Prefix { op, right } => {
+                let right = self.eval_expr(*right)?;
+                self.eval_prefix(op, right)
+            }
+            Expr::Infix { op, left, right } => {
+                let left = self.eval_expr(*left)?;
+                let right = self.eval_expr(*right)?;
+                self.eval_infix(op, left, right)
+            }
+            Expr::If { cond, consq, alter } => {
+                let cond = self.eval_expr(*cond)?;
+                self.eval_if(cond, consq, alter)
+            }
+            Expr::Ident(ident) => self.env.borrow().get(&ident),
+            Expr::Fn { params, body } => Ok(Object::Fn {
+                params,
+                body,
+                env: Rc::clone(&self.env),
+            }),
+            Expr::Call { func, args } => {
+                let func = self.eval_expr(*func)?;
+                let args = args
+                    .into_iter()
+                    .map(|e| self.eval_expr(e))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Self::eval_call(func, args)
+            }
+        }
+    }
+
+    fn eval_prefix(&mut self, op: PrefixOp, right: Object) -> RuntimeResult<Object> {
+        match op {
+            // `-` should only accept number as operand
+            PrefixOp::Negate => match right {
+                Object::Int(n) => Ok(Object::Int(-n)),
+                _ => Err(RuntimeError::BadUnaryOperand(op, right)),
+            },
+            // `!` applies to the `truthy value` of its operand
+            PrefixOp::Not => Ok(Object::Bool(!bool::from(&right))),
+        }
+    }
+
+    fn eval_infix(&mut self, op: InfixOp, left: Object, right: Object) -> RuntimeResult<Object> {
+        match (&left, &right) {
+            // numbers can be +-*/ and compared
+            (Object::Int(l), Object::Int(r)) => match op {
+                InfixOp::Plus => Ok(Object::Int(l + r)),
+                InfixOp::Minus => Ok(Object::Int(l - r)),
+                InfixOp::Mult => Ok(Object::Int(l * r)),
+                InfixOp::Div => {
+                    if *r != 0 {
+                        Ok(Object::Int(l / r))
+                    } else {
+                        Err(RuntimeError::ZeroDivisionError)
+                    }
+                }
+                InfixOp::EQ => Ok(Object::Bool(l == r)),
+                InfixOp::NQ => Ok(Object::Bool(l != r)),
+                InfixOp::LT => Ok(Object::Bool(l < r)),
+                InfixOp::GT => Ok(Object::Bool(l > r)),
+            },
+            // generally objects have Eq trait
+            _ => match op {
+                InfixOp::EQ => Ok(Object::Bool(left == right)),
+                InfixOp::NQ => Ok(Object::Bool(left != right)),
+                _ => Err(RuntimeError::BadBinaryOperand(op, left, right)),
+            },
+        }
+    }
+
+    fn eval_if(
+        &mut self,
+        cond: Object,
+        consq: Block,
+        alter: Option<Block>,
+    ) -> RuntimeResult<Object> {
+        if bool::from(&cond) {
+            self.eval_block(consq)
+        } else if let Some(block) = alter {
+            self.eval_block(block)
+        } else {
+            // false predicate with no else evals to null
             Ok(Object::Null)
         }
-        Stmt::Ret(e) => Ok(Object::Ret(eval_expr(e, env)?.into())),
-        Stmt::Expr(e) => eval_expr(e, env),
     }
-}
 
-fn eval_expr(expr: Expr, env: &mut Environment) -> RuntimeResult<Object> {
-    match expr {
-        Expr::Int(n) => Ok(Object::Int(n)),
-        Expr::Bool(b) => Ok(Object::Bool(b)),
-        Expr::Prefix { op, right } => eval_prefix(op, eval_expr(*right, env)?),
-        Expr::Infix { op, left, right } => {
-            eval_infix(op, eval_expr(*left, env)?, eval_expr(*right, env)?)
-        }
-        Expr::If { cond, consq, alter } => eval_if(*cond, consq, alter, env),
-        Expr::Ident(ident) => env.get(&ident),
-        Expr::Fn { params, body } => Ok(Object::Fn {
-            params,
-            body,
-            //env: env.clone(),
-            env: todo!(),
-            // TODO: cloning the scope here makes recursion impossible. e.g.,
-            // let fact = fn(n) { if (n == 0) { 1 } else { n * fact(n - 1) } }
-            // The scope of fn will not contain `fact` itself.
-            // Maybe we should use Rc<RefCell<Environment>>.
-        }),
-        Expr::Call { func, args } => {
-            // eval func and args into objects
-            let func = eval_expr(*func, env)?;
-            let args = args
-                .into_iter()
-                .map(|e| eval_expr(e, env))
-                .collect::<RuntimeResult<Vec<Object>>>()?;
-            let Object::Fn { params, body, env } = func else {
-                return Err(RuntimeError::NotCallable(func));
-            };
+    fn eval_block(&mut self, block: Block) -> RuntimeResult<Object> {
+        let mut result = Object::Null;
 
-            // check if # of args match
-            if params.len() != args.len() {
-                return Err(RuntimeError::BadNumOfArguments {
-                    expected: params.len(),
-                    got: args.len(),
-                });
-            }
-
-            // prepare environment, create local bindings
-            let mut extended_env = Environment::enclose(env);
-            for (ident, obj) in params.into_iter().zip(args.into_iter()) {
-                extended_env.set(ident, obj);
-            }
-
-            // eval the block in local scope
-            let result = eval_block(body, &mut extended_env)?;
-
-            // unpack if result is a return variant;
-            // we don't want this to bubble up
-            if let Object::Ret(e) = result {
-                Ok(*e)
-            } else {
-                Ok(result)
+        for stmt in block.0 {
+            result = self.eval_stmt(stmt)?;
+            // if we hit a `return`, do NOT unwrap, return the `Ret` variant
+            if let Object::Ret(_) = result {
+                return Ok(result);
             }
         }
+
+        Ok(result)
     }
-}
 
-fn eval_prefix(op: PrefixOp, right: Object) -> RuntimeResult<Object> {
-    // Design choices:
-    // 1. `-` should only accept number as operand.
-    // 2. `!` applies to the `truthy value` of its operand.
-    match op {
-        PrefixOp::Negate => match right {
-            Object::Int(n) => Ok(Object::Int(-n)),
-            _ => Err(RuntimeError::BadUnaryOperand(op, right)),
-        },
-        PrefixOp::Not => Ok(Object::Bool(!bool::from(&right))),
-    }
-}
+    fn eval_call(func: Object, args: Vec<Object>) -> RuntimeResult<Object> {
+        // assert the func object is a callable variant
+        // the env inside is the scope captured by the function
+        let Object::Fn { params, body, env } = func else {
+            return Err(RuntimeError::NotCallable(func));
+        };
+        // check # of params
+        if params.len() != args.len() {
+            return Err(RuntimeError::BadNumOfArguments {
+                expected: params.len(),
+                got: args.len(),
+            });
+        }
 
-fn eval_infix(op: InfixOp, left: Object, right: Object) -> RuntimeResult<Object> {
-    match (&left, &right) {
-        (Object::Int(l), Object::Int(r)) => match op {
-            InfixOp::Plus => Ok(Object::Int(l + r)),
-            InfixOp::Minus => Ok(Object::Int(l - r)),
-            InfixOp::Mult => Ok(Object::Int(l * r)),
-            InfixOp::Div => {
-                if *r != 0 {
-                    Ok(Object::Int(l / r))
-                } else {
-                    Err(RuntimeError::ZeroDivisionError)
-                }
-            }
-            InfixOp::EQ => Ok(Object::Bool(l == r)),
-            InfixOp::NQ => Ok(Object::Bool(l != r)),
-            InfixOp::LT => Ok(Object::Bool(l < r)),
-            InfixOp::GT => Ok(Object::Bool(l > r)),
-        },
-        _ => match op {
-            InfixOp::EQ => Ok(Object::Bool(left == right)),
-            InfixOp::NQ => Ok(Object::Bool(left != right)),
-            _ => Err(RuntimeError::BadBinaryOperand(op, left, right)),
-        },
-    }
-}
+        // create local scope enclosing the function scope
+        let mut local = Environment::enclose(env);
+        // bind variables to local scope
+        for (param, obj) in params.into_iter().zip(args.into_iter()) {
+            local.set(param, obj);
+        }
 
-fn eval_if(
-    cond: Expr,
-    consq: Block,
-    alter: Option<Block>,
-    env: &mut Environment,
-) -> RuntimeResult<Object> {
-    let cond = eval_expr(cond, env)?;
+        // eval the body in the local scope
+        let mut eval = Evaluator {
+            env: Rc::new(RefCell::new(local)),
+        };
+        let result = eval.eval_block(body)?;
 
-    if bool::from(&cond) {
-        eval_block(consq, env)
-    } else if let Some(block) = alter {
-        eval_block(block, env)
-    } else {
-        Ok(Object::Null)
-    }
-}
-
-fn eval_block(block: Block, env: &mut Environment) -> RuntimeResult<Object> {
-    let mut result = Object::Null;
-
-    for stmt in block.0 {
-        result = eval_stmt(stmt, env)?;
-        // if we hit a `return`, do NOT unwrap, return the `Ret` variant
-        if let Object::Ret(_) = result {
-            return Ok(result);
+        // unpack if result is a return variant;
+        // we don't want this to bubble up
+        if let Object::Ret(e) = result {
+            Ok(*e)
+        } else {
+            Ok(result)
         }
     }
-
-    Ok(result)
 }
 
 #[derive(Debug)]
@@ -183,7 +208,8 @@ mod tests {
         let prog = parser.parse_program();
         assert_eq!(parser.errors(), vec![]);
 
-        eval_program(prog, &mut Environment::new()).unwrap()
+        let mut evaluator = Evaluator::new();
+        evaluator.eval_program(prog).unwrap()
     }
 
     #[test]

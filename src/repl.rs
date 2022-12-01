@@ -1,7 +1,6 @@
 use std::io::{self, BufRead, Write};
 
-use crate::environment::Environment;
-use crate::evaluator::eval_program;
+use crate::evaluator::Evaluator;
 use crate::lexer::Lexer;
 use crate::object::Object;
 use crate::parser::Parser;
@@ -12,7 +11,7 @@ pub fn run() {
     let stdin = io::stdin();
     let mut it = stdin.lock().lines();
 
-    let mut env = Environment::new();
+    let mut evaluator = Evaluator::new();
 
     loop {
         print!("{}", PROMPT);
@@ -32,7 +31,7 @@ pub fn run() {
             continue;
         }
 
-        let evaluated = eval_program(program, &mut env);
+        let evaluated = evaluator.eval_program(program);
         match evaluated {
             Ok(Object::Null) => continue,
             Ok(obj) => println!("{}", obj),

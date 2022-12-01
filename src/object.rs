@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::fmt;
+use std::rc::Rc;
 
 use crate::ast::{Block, Ident};
 use crate::environment::Environment;
@@ -12,7 +14,7 @@ pub enum Object {
     Fn {
         params: Vec<Ident>,
         body: Block,
-        env: Environment,
+        env: Rc<RefCell<Environment>>,
     },
 }
 
