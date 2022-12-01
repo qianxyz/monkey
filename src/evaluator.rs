@@ -355,4 +355,19 @@ addTwo(2);
 ";
         assert_eq!(eval_helper(input), Object::Int(4))
     }
+
+    #[test]
+    fn recursion() {
+        let input = "\
+let fib = fn(x) {
+    if (x < 2) {
+        x;
+    } else {
+        fib(x - 1) + fib(x - 2);
+    }
+};
+fib(10);
+";
+        assert_eq!(eval_helper(input), Object::Int(55))
+    }
 }
