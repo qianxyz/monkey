@@ -1,9 +1,7 @@
 use std::fmt;
 
-use crate::{
-    ast::{Block, Ident},
-    environment::Environment,
-};
+use crate::ast::{Block, Ident};
+use crate::environment::Environment;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Object {
