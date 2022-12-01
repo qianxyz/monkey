@@ -6,7 +6,7 @@ use crate::ast::Ident;
 use crate::evaluator::{RuntimeError, RuntimeResult};
 use crate::object::Object;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Environment {
     inner: HashMap<Ident, Object>,
     outer: Option<Rc<RefCell<Environment>>>,
