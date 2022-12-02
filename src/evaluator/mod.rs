@@ -1,9 +1,12 @@
+pub mod environment;
+pub mod object;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{Block, Expr, Ident, InfixOp, PrefixOp, Program, Stmt};
-use crate::environment::Environment;
-use crate::object::Object;
+use crate::parser::{Block, Expr, Ident, InfixOp, PrefixOp, Program, Stmt};
+pub use environment::Environment;
+pub use object::Object;
 
 pub struct Evaluator {
     env: Rc<RefCell<Environment>>,

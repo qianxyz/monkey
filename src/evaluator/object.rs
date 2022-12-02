@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-use crate::ast::{Block, Ident};
-use crate::environment::Environment;
+use super::Environment;
+use crate::parser::{Block, Ident};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Object {

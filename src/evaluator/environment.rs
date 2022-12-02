@@ -2,9 +2,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::Ident;
-use crate::evaluator::{RuntimeError, RuntimeResult};
-use crate::object::Object;
+use super::{Object, RuntimeError, RuntimeResult};
+use crate::parser::Ident;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Environment {

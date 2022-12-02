@@ -1,6 +1,8 @@
+pub mod token;
+
 use std::str;
 
-use crate::token::Token;
+pub use token::Token;
 
 pub struct Lexer {
     /// The input string, stored as a byte array

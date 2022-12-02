@@ -1,8 +1,9 @@
+pub mod ast;
+
 use std::mem;
 
-use crate::ast::{Block, Expr, Ident, InfixOp, PrefixOp, Program, Stmt};
-use crate::lexer::Lexer;
-use crate::token::Token;
+use crate::lexer::{Lexer, Token};
+pub use ast::{Block, Expr, Ident, InfixOp, PrefixOp, Program, Stmt};
 
 #[derive(PartialEq, PartialOrd)]
 enum Precedence {

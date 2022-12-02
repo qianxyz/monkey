@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::token::Token;
+use crate::lexer::Token;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PrefixOp {
